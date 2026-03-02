@@ -142,5 +142,4 @@ npx hardhat test
 
 ## Notes
 
-- The architecture and phased build plan are documented in `Tavvio-Technical-Build-Guide.md`.
 - Production deployment requires contract audits, strict key management, and chain-specific bridge credentials.
