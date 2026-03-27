@@ -4,6 +4,7 @@ import {
   BridgeInResult,
   BridgeOutParams,
   BridgeOutResult,
+  CompleteSourceLockParams,
 } from '@tavvio/types';
 import { WormholeService } from './providers/wormhole.service';
 import { LayerswapService } from './providers/layerswap.service';
@@ -136,6 +137,13 @@ export class BridgeRouterService {
       default:
         throw new Error('Unknown provider');
     }
+  }
+
+  async completeSourceLock(params: CompleteSourceLockParams): Promise<string> {
+    const { chain, lockId, preimage } = params;
+    // In a real implementation, this would call the withdraw() function on the EVM HTLC contract
+    // linked to the specific chain.
+    return `tx_hash_for_unlocking_${lockId}_on_${chain}`;
   }
 
   private stellarDirectTransfer(params: BridgeOutParams): BridgeOutResult {
