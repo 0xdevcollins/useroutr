@@ -1,23 +1,38 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import type { Merchant } from '../../../../generated/prisma/client.js';
+import { PrismaService } from '../../prisma/prisma.service.js';
 
 export interface JwtPayload {
-  sub: string; // merchant id
+  sub: string;
   email: string;
+  type: 'access' | 'refresh';
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'change-me-in-production',
+      secretOrKey: process.env.JWT_SECRET || 'fallback-dev-secret',
     });
   }
 
-  validate(payload: JwtPayload) {
-    return { id: payload.sub, email: payload.email };
+  async validate(payload: JwtPayload): Promise<Merchant> {
+    if (payload.type !== 'access') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (!merchant) {
+      throw new UnauthorizedException('Merchant not found');
+    }
+
+    return merchant;
   }
 }

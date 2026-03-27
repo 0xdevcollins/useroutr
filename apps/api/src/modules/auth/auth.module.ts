@@ -1,21 +1,29 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthService } from './auth.service.js';
+import { AuthController } from './auth.controller.js';
+import { JwtStrategy } from './strategies/jwt.strategy.js';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { ApiKeyGuard } from '../../common/guards/api-key.guard.js';
+import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard.js';
 
 @Module({
   imports: [
-    PassportModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'change-me-in-production',
-      signOptions: { expiresIn: '7d' },
+      secret: process.env.JWT_SECRET,
+      signOptions: { expiresIn: '15m' },
     }),
   ],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    ApiKeyGuard,
+    CombinedAuthGuard,
+  ],
   controllers: [AuthController],
-  exports: [JwtModule, JwtAuthGuard],
+  exports: [AuthService, JwtAuthGuard, ApiKeyGuard, CombinedAuthGuard],
 })
 export class AuthModule {}

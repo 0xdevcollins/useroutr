@@ -20,6 +20,9 @@ import { RelayModule } from './modules/relay/relay.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { PrismaService } from './modules/prisma/prisma.service';
 
 
@@ -39,6 +42,24 @@ import { PrismaService } from './modules/prisma/prisma.service';
         url: process.env.REDIS_URL,
       },
     }),
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000,
+        limit: 100,
+      },
+      {
+        name: 'auth',
+        ttl: 60000,
+        limit: 10,
+      },
+      {
+        name: 'quote',
+        ttl: 60000,
+        limit: 30,
+      },
+    ]),
     StellarModule,
     MerchantModule,
     PaymentsModule,
@@ -54,6 +75,18 @@ import { PrismaService } from './modules/prisma/prisma.service';
     AnalyticsModule,
   ],
   controllers: [AppController],
-  providers: [AppService, EventsGateway],
+  providers: [
+    AppService,
+    EventsGateway,
+    {
+      provide: APP_GUARD,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IdempotencyInterceptor,
+    },
+  ],
 })
 export class AppModule {}
