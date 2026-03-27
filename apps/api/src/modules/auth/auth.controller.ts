@@ -1,4 +1,73 @@
-import { Controller } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  Query,
+  UseGuards,
+  UsePipes,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { AuthService } from './auth.service.js';
+import { RegisterSchema } from './dto/register.dto.js';
+import type { RegisterDto } from './dto/register.dto.js';
+import { LoginSchema } from './dto/login.dto.js';
+import type { LoginDto } from './dto/login.dto.js';
+import { RefreshSchema } from './dto/refresh.dto.js';
+import type { RefreshDto } from './dto/refresh.dto.js';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { PublicRoute } from '../../common/decorators/public-route.decorator.js';
+import { CurrentMerchant } from '../../common/decorators/current-merchant.decorator.js';
+import { ZodValidationPipe } from './pipes/zod-validation.pipe.js';
 
-@Controller('auth')
-export class AuthController {}
+@Controller()
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @PublicRoute()
+  @Post('auth/register')
+  @UsePipes(new ZodValidationPipe(RegisterSchema))
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
+
+  @PublicRoute()
+  @Post('auth/login')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ZodValidationPipe(LoginSchema))
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
+  }
+
+  @PublicRoute()
+  @Post('auth/refresh')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ZodValidationPipe(RefreshSchema))
+  async refresh(@Body() dto: RefreshDto) {
+    return this.authService.refreshToken(dto.refreshToken);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('auth/me')
+  async getProfile(@CurrentMerchant('id') merchantId: string) {
+    return this.authService.getProfile(merchantId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('merchants/api-keys')
+  async generateApiKey(
+    @CurrentMerchant('id') merchantId: string,
+    @Query('mode') mode?: 'live' | 'test',
+  ) {
+    return this.authService.generateApiKey(merchantId, mode ?? 'live');
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('merchants/api-keys')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async revokeApiKey(@CurrentMerchant('id') merchantId: string): Promise<void> {
+    await this.authService.revokeApiKey(merchantId);
+  }
+}
