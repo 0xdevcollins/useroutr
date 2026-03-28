@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button, Modal, Input, useToast } from "@tavvio/ui";
+import { formatDate, formatLastUsed } from "@/lib/utils/time";
 import { api } from "@/lib/api";
 import { Copy, Eye, EyeSlash, Warning, Trash } from "@phosphor-icons/react";
 
@@ -67,7 +68,8 @@ export default function ApiKeysPage() {
   const handleRevokeKey = async () => {
     if (!selectedKeyToRevoke) return;
 
-    const keyPrefix = selectedKeyType === "live" ? "ur_live_" : "ur_test_";
+    const keyPrefix =
+      selectedKeyToRevoke.type === "live" ? "ur_live_" : "ur_test_";
     if (revokeConfirmText !== keyPrefix) {
       toast("Please type the key prefix to confirm.", "error");
       return;
@@ -91,30 +93,6 @@ export default function ApiKeysPage() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast("Copied to clipboard!", "success");
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  const formatLastUsed = (dateString: string | null) => {
-    if (!dateString) return "Never";
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? "s" : ""} ago`;
-    if (diffHours < 24)
-      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
   };
 
   return (
@@ -163,7 +141,13 @@ export default function ApiKeysPage() {
                   </code>
                   <button
                     onClick={() => copyToClipboard(apiKey.key)}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={apiKey.key.includes("****")}
+                    className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      apiKey.key.includes("****")
+                        ? "Cannot copy masked key"
+                        : "Copy to clipboard"
+                    }
                   >
                     <Copy size={16} />
                   </button>
@@ -323,7 +307,7 @@ export default function ApiKeysPage() {
               loading={isLoading}
               disabled={
                 revokeConfirmText !==
-                (selectedKeyType === "live" ? "ur_live_" : "ur_test_")
+                (selectedKeyToRevoke?.type === "live" ? "ur_live_" : "ur_test_")
               }
             >
               Revoke Key

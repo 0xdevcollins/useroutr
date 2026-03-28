@@ -9,7 +9,7 @@ interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: "owner" | "admin" | "developer" | "viewer";
+  role: "owner" | "admin" | "developer" | "finance" | "viewer";
   isCurrentUser?: boolean;
 }
 
@@ -17,6 +17,7 @@ const ROLES = [
   { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
   { value: "developer", label: "Developer" },
+  { value: "finance", label: "Finance" },
   { value: "viewer", label: "Viewer" },
 ];
 
@@ -117,6 +118,8 @@ export default function TeamPage() {
         return "bg-blue-500/10 text-blue-500 border-blue-500/30";
       case "developer":
         return "bg-green-500/10 text-green-500 border-green-500/30";
+      case "finance":
+        return "bg-orange-500/10 text-orange-500 border-orange-500/30";
       case "viewer":
         return "bg-gray-500/10 text-gray-500 border-gray-500/30";
       default:
