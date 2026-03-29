@@ -2,6 +2,7 @@
 
 import { CreditCard, Bank, CurrencyBtc } from "@phosphor-icons/react";
 import { cn } from "@tavvio/ui";
+import Link from "next/link";
 
 const METHODS = [
   {
@@ -24,7 +25,7 @@ const METHODS = [
   },
 ] as const;
 
-export function PaymentMethodSelector() {
+export function PaymentMethodSelector({ paymentId }: { paymentId: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
       <h2 className="font-display text-base font-semibold text-foreground">
@@ -35,8 +36,9 @@ export function PaymentMethodSelector() {
         {METHODS.map((method) => {
           const Icon = method.icon;
           return (
-            <button
+            <Link
               key={method.id}
+              href={`/${paymentId}/${method.id}`}
               className={cn(
                 "flex w-full items-center gap-4 rounded-lg border border-border px-4 py-3.5 text-left transition-colors",
                 "hover:border-primary/40 hover:bg-primary/5"
@@ -53,7 +55,7 @@ export function PaymentMethodSelector() {
                   {method.description}
                 </p>
               </div>
-            </button>
+            </Link>
           );
         })}
       </div>
