@@ -8,7 +8,7 @@ import {
 import Redis from 'ioredis';
 import { StellarService } from '../stellar/stellar.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { Quote } from '@prisma/client';
+import { Quote } from '../../../generated/prisma/client';
 
 @Injectable()
 export class QuotesService {

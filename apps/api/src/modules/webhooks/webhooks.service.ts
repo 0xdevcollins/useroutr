@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { WebhookStatus } from '@prisma/client';
+import { WebhookStatus } from '../../../generated/prisma/client';
 
 @Injectable()
 export class WebhooksService {
@@ -8,8 +8,15 @@ export class WebhooksService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async dispatch(merchantId: string, eventType: string, payload: any, paymentId?: string) {
-    this.logger.log(`Dispatching webhook ${eventType} for merchant ${merchantId}`);
+  async dispatch(
+    merchantId: string,
+    eventType: string,
+    payload: any,
+    paymentId?: string,
+  ) {
+    this.logger.log(
+      `Dispatching webhook ${eventType} for merchant ${merchantId}`,
+    );
 
     // Create webhook event record
     const event = await this.prisma.webhookEvent.create({
@@ -24,8 +31,10 @@ export class WebhooksService {
 
     // In a real implementation, this would trigger an async worker to send the POST request
     // For now, we'll just log it
-    this.logger.log(`Webhook ${event.id} queued for delivery to merchant ${merchantId}`);
-    
+    this.logger.log(
+      `Webhook ${event.id} queued for delivery to merchant ${merchantId}`,
+    );
+
     return event;
   }
 }
