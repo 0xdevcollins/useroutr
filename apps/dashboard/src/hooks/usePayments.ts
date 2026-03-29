@@ -1,14 +1,39 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
-interface Payment {
+export interface Payment {
   id: string;
-  amount: number;
+  amount: string | number;
   currency: string;
-  status: string;
-  customerEmail?: string;
+  status: PaymentStatus;
+  sourceChain: string;
+  sourceAsset: string;
+  sourceAmount: string | number;
+  destChain: string;
+  destAsset: string;
+  destAmount: string | number;
+  destAddress: string;
   createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  refundedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+  // For display
+  customerEmail?: string;
+  sourceAddress?: string;
 }
+
+export type PaymentStatus = 
+  | "PENDING"
+  | "QUOTE_LOCKED"
+  | "SOURCE_LOCKED"
+  | "STELLAR_LOCKED"
+  | "PROCESSING"
+  | "COMPLETED"
+  | "REFUNDING"
+  | "REFUNDED"
+  | "EXPIRED"
+  | "FAILED";
 
 interface PaymentsResponse {
   data: Payment[];
@@ -17,10 +42,20 @@ interface PaymentsResponse {
   limit: number;
 }
 
-interface PaymentsParams extends Record<string, unknown> {
+export interface PaymentsParams extends Record<string, unknown> {
   page?: number;
   limit?: number;
-  status?: string;
+  status?: PaymentStatus | string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  currency?: string;
+  sourceChain?: string;
+  destChain?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
 }
 
 export function usePayments(params: PaymentsParams = {}) {

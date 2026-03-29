@@ -62,19 +62,21 @@ function Select({
             sideOffset={4}
           >
             <RadixSelect.Viewport className="p-1">
-              {options.map((opt) => (
-                <RadixSelect.Item
-                  key={opt.value}
-                  value={opt.value}
-                  disabled={opt.disabled}
-                  className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-colors hover:bg-[var(--accent)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                >
-                  <RadixSelect.ItemIndicator>
-                    <Check size={14} weight="bold" className="text-[var(--primary)]" />
-                  </RadixSelect.ItemIndicator>
-                  <RadixSelect.ItemText>{opt.label}</RadixSelect.ItemText>
-                </RadixSelect.Item>
-              ))}
+              {options
+                .filter((opt) => opt.value !== "")
+                .map((opt) => (
+                  <RadixSelect.Item
+                    key={opt.value}
+                    value={opt.value}
+                    disabled={opt.disabled}
+                    className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm text-[var(--foreground)] outline-none transition-colors hover:bg-[var(--accent)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                  >
+                    <RadixSelect.ItemIndicator>
+                      <Check size={14} weight="bold" className="text-[var(--primary)]" />
+                    </RadixSelect.ItemIndicator>
+                    <RadixSelect.ItemText>{opt.label}</RadixSelect.ItemText>
+                  </RadixSelect.Item>
+                ))}
             </RadixSelect.Viewport>
           </RadixSelect.Content>
         </RadixSelect.Portal>
