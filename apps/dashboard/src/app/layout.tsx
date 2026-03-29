@@ -5,6 +5,7 @@ import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { ToastProvider } from "@tavvio/ui";
 import "./globals.css";
+import { ToastProvider } from "@tavvio/ui";
 
 const inter = Inter({
   subsets: ["latin"],
