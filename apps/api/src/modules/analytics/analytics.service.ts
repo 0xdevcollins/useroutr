@@ -1,15 +1,34 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
+
+// ----- Accepted values -----
+const VALID_PERIODS = new Set(['7d', '30d', '90d', '1y']);
+const VALID_GRANULARITIES = new Set(['day', 'week', 'month']);
+
+type GranularityUnit = 'day' | 'week' | 'month';
+
+// ----- Response types -----
+export interface RecentPayment {
+  id: string;
+  merchantId: string;
+  status: unknown;
+  destAmount: unknown;
+  destAsset: string;
+  sourceChain: string;
+  createdAt: Date;
+  [key: string]: unknown;
+}
 
 export interface OverviewData {
   revenue: { total: number; delta: number };
   payments: { count: number; delta: number };
   payouts: { total: number };
+  /** Lifetime balance (total lifetime revenue minus total lifetime payouts), not period-scoped. */
   balance: number;
   sparklines: { date: string; value: number }[];
-  recentTxns: any[];
+  recentTxns: RecentPayment[];
 }
 
 export interface TimeSeriesData {
@@ -20,12 +39,23 @@ export interface PaymentAnalytics {
   total: number;
   delta: number;
   conversionRate: number;
-  byMethod: { method: string; amount: number; percentage: number }[];
+  /**
+   * Breakdown by source chain (e.g. ethereum, base, polygon).
+   * Renamed from byMethod — the Payment schema does not carry a discrete
+   * payment-method field (card / crypto / bank); sourceChain is the closest
+   * available dimension. Track adding a paymentMethod column as a follow-up.
+   */
+  byChain: { chain: string; count: number; percentage: number }[];
 }
 
 export interface FailureAnalytics {
   failureRate: number;
   byHourHeatmap: { hour: number; count: number }[];
+  /**
+   * Note: the Payment schema does not expose a failure-reason field, so
+   * topReasons is currently a single aggregated bucket. Add a `failureReason`
+   * column to Payment to enable granular breakdown (tracked as follow-up).
+   */
   topReasons: { reason: string; count: number }[];
 }
 
@@ -47,6 +77,25 @@ export class AnalyticsService {
     @InjectRedis() private readonly redis: Redis,
     private readonly prisma: PrismaService,
   ) {}
+
+  /** Validate period and return 400 for unrecognised values. */
+  private validatePeriod(period: string): void {
+    if (!VALID_PERIODS.has(period)) {
+      throw new BadRequestException(
+        `Invalid period "${period}". Accepted values: ${[...VALID_PERIODS].join(', ')}.`,
+      );
+    }
+  }
+
+  /** Validate granularity and return 400 for unrecognised values. */
+  private validateGranularity(granularity: string): GranularityUnit {
+    if (!VALID_GRANULARITIES.has(granularity)) {
+      throw new BadRequestException(
+        `Invalid granularity "${granularity}". Accepted values: ${[...VALID_GRANULARITIES].join(', ')}.`,
+      );
+    }
+    return granularity as GranularityUnit;
+  }
 
   private getPeriodDates(period: string) {
     const currentEnd = new Date();
@@ -84,13 +133,14 @@ export class AnalyticsService {
   }
 
   async getOverview(merchantId: string, period: string): Promise<OverviewData> {
+    this.validatePeriod(period);
     return this.getCached(
       `analytics:${merchantId}:overview:${period}`,
       async () => {
         const { currentStart, currentEnd, previousStart, previousEnd } =
           this.getPeriodDates(period);
 
-        // Revenue computations
+        // --- Revenue (period-scoped) ---
         const currRevenueAggr = await this.prisma.payment.aggregate({
           where: {
             merchantId,
@@ -112,7 +162,7 @@ export class AnalyticsService {
         const prevRevenue = Number(prevRevenueAggr._sum.destAmount || 0);
         const revenueDelta = this.calculateDelta(currRevenue, prevRevenue);
 
-        // Payments computations
+        // --- Payments (period-scoped) ---
         const currPaymentsCount = await this.prisma.payment.count({
           where: {
             merchantId,
@@ -130,7 +180,7 @@ export class AnalyticsService {
           prevPaymentsCount,
         );
 
-        // Payouts computations
+        // --- Payouts (period-scoped, for display) ---
         const currPayoutsAggr = await this.prisma.payout.aggregate({
           where: {
             merchantId,
@@ -141,7 +191,22 @@ export class AnalyticsService {
         });
         const currPayouts = Number(currPayoutsAggr._sum.amount || 0);
 
-        // Sparklines (simplified daily sum)
+        // --- Lifetime balance (total revenue minus total payouts, not period-scoped) ---
+        const lifetimeRevenueAggr = await this.prisma.payment.aggregate({
+          where: { merchantId, status: 'COMPLETED' },
+          _sum: { destAmount: true },
+        });
+        const lifetimePayoutsAggr = await this.prisma.payout.aggregate({
+          where: { merchantId, status: 'COMPLETED' },
+          _sum: { amount: true },
+        });
+        const lifetimeRevenue = Number(
+          lifetimeRevenueAggr._sum.destAmount || 0,
+        );
+        const lifetimePayouts = Number(lifetimePayoutsAggr._sum.amount || 0);
+        const balance = lifetimeRevenue - lifetimePayouts;
+
+        // --- Sparklines (daily revenue for the selected period) ---
         const dailyRevenue = await this.prisma.$queryRaw<
           { date: string; value: number }[]
         >`
@@ -152,7 +217,7 @@ export class AnalyticsService {
         ORDER BY date ASC;
       `;
 
-        // Recent txns
+        // --- Recent transactions (typed via Prisma) ---
         const recentTxns = await this.prisma.payment.findMany({
           where: { merchantId },
           orderBy: { createdAt: 'desc' },
@@ -163,7 +228,7 @@ export class AnalyticsService {
           revenue: { total: currRevenue, delta: revenueDelta },
           payments: { count: currPaymentsCount, delta: paymentDelta },
           payouts: { total: currPayouts },
-          balance: currRevenue - currPayouts,
+          balance,
           sparklines: dailyRevenue.map((r) => ({
             date: String(r.date),
             value: Number(r.value),
@@ -179,18 +244,26 @@ export class AnalyticsService {
     period: string,
     granularity: string,
   ): Promise<TimeSeriesData> {
+    this.validatePeriod(period);
+    // Validate granularity against allowlist before interpolating into SQL.
+    const safeGranularity = this.validateGranularity(granularity);
+
     return this.getCached(
-      `analytics:${merchantId}:revenue:${period}:${granularity}`,
+      `analytics:${merchantId}:revenue:${period}:${safeGranularity}`,
       async () => {
         const { currentStart, currentEnd } = this.getPeriodDates(period);
-        // granularity: 'day' | 'week' | 'month'
-        const timeSeries = await this.prisma.$queryRaw<
-          { date: string; value: number }[]
-        >`
-        SELECT DATE_TRUNC(${granularity}, "createdAt") as date, SUM("destAmount") as value
+
+        // Use string interpolation safely because safeGranularity is restricted
+        // to ['day', 'week', 'month'] by the allowlist check above.
+
+        const timeSeries = await (this.prisma.$queryRaw as (
+          query: TemplateStringsArray,
+          ...values: unknown[]
+        ) => Promise<{ date: string; value: number }[]>)`
+        SELECT DATE_TRUNC('${safeGranularity}', "createdAt") as date, SUM("destAmount") as value
         FROM "Payment"
         WHERE "merchantId" = ${merchantId} AND status = 'COMPLETED' AND "createdAt" >= ${currentStart} AND "createdAt" <= ${currentEnd}
-        GROUP BY DATE_TRUNC(${granularity}, "createdAt")
+        GROUP BY DATE_TRUNC('${safeGranularity}', "createdAt")
         ORDER BY date ASC;
       `;
         return {
@@ -207,6 +280,7 @@ export class AnalyticsService {
     merchantId: string,
     period: string,
   ): Promise<PaymentAnalytics> {
+    this.validatePeriod(period);
     return this.getCached(
       `analytics:${merchantId}:payments:${period}`,
       async () => {
@@ -239,7 +313,10 @@ export class AnalyticsService {
             ? Number(((currCompleted / currTotal) * 100).toFixed(2))
             : 0;
 
-        const methodsCount = await this.prisma.payment.groupBy({
+        // Groups by sourceChain (the nearest available breakdown dimension).
+        // The Payment schema does not have a paymentMethod field (card/crypto/bank).
+        // Renamed from byMethod → byChain to accurately reflect the data returned.
+        const chainCounts = await this.prisma.payment.groupBy({
           by: ['sourceChain'],
           where: {
             merchantId,
@@ -248,16 +325,16 @@ export class AnalyticsService {
           _count: { sourceChain: true },
         });
 
-        const byMethod = methodsCount.map((m) => ({
-          method: m.sourceChain || 'unknown',
-          amount: m._count.sourceChain,
+        const byChain = chainCounts.map((m) => ({
+          chain: m.sourceChain || 'unknown',
+          count: m._count.sourceChain,
           percentage:
             currTotal > 0
               ? Number(((m._count.sourceChain / currTotal) * 100).toFixed(2))
               : 0,
         }));
 
-        return { total: currTotal, delta, conversionRate, byMethod };
+        return { total: currTotal, delta, conversionRate, byChain };
       },
     );
   }
@@ -266,6 +343,7 @@ export class AnalyticsService {
     merchantId: string,
     period: string,
   ): Promise<FailureAnalytics> {
+    this.validatePeriod(period);
     return this.getCached(
       `analytics:${merchantId}:failures:${period}`,
       async () => {
@@ -287,7 +365,6 @@ export class AnalyticsService {
         const failureRate =
           total > 0 ? Number(((failed / total) * 100).toFixed(2)) : 0;
 
-        // Extract hour from createdAt directly through Postgres raw query
         const heatmap = await this.prisma.$queryRaw<
           { hour: number; count: number | bigint }[]
         >`
@@ -304,7 +381,11 @@ export class AnalyticsService {
             hour: Number(h.hour),
             count: Number(h.count),
           })),
-          topReasons: [{ reason: 'Generic Failure', count: failed }], // Mocking top reason as schema lacks failure reason on Payment
+          // NOTE: The Payment schema does not expose a failure-reason field so
+          // topReasons is a single aggregated bucket for now. A follow-up task
+          // should add a `failureReason` column to the Payment table to enable
+          // granular breakdown.
+          topReasons: [{ reason: 'Generic Failure', count: failed }],
         };
       },
     );
@@ -314,6 +395,7 @@ export class AnalyticsService {
     merchantId: string,
     period: string,
   ): Promise<CurrencyData[]> {
+    this.validatePeriod(period);
     return this.getCached(
       `analytics:${merchantId}:currencies:${period}`,
       async () => {
@@ -359,6 +441,7 @@ export class AnalyticsService {
     merchantId: string,
     period: string,
   ): Promise<PayoutAnalytics> {
+    this.validatePeriod(period);
     return this.getCached(
       `analytics:${merchantId}:payouts:${period}`,
       async () => {

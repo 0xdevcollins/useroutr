@@ -1,7 +1,39 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentMerchant } from '../../common/decorators/current-merchant.decorator';
 import { AnalyticsService } from './analytics.service';
+
+const VALID_PERIODS = ['7d', '30d', '90d', '1y'] as const;
+const VALID_GRANULARITIES = ['day', 'week', 'month'] as const;
+
+type Period = (typeof VALID_PERIODS)[number];
+type Granularity = (typeof VALID_GRANULARITIES)[number];
+
+function parsePeriod(raw?: string): Period {
+  const value = raw ?? '30d';
+  if (!(VALID_PERIODS as readonly string[]).includes(value)) {
+    throw new BadRequestException(
+      `Invalid period "${value}". Accepted values: ${VALID_PERIODS.join(', ')}.`,
+    );
+  }
+  return value as Period;
+}
+
+function parseGranularity(raw?: string): Granularity {
+  const value = raw ?? 'day';
+  if (!(VALID_GRANULARITIES as readonly string[]).includes(value)) {
+    throw new BadRequestException(
+      `Invalid granularity "${value}". Accepted values: ${VALID_GRANULARITIES.join(', ')}.`,
+    );
+  }
+  return value as Granularity;
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('v1/analytics')
@@ -13,7 +45,7 @@ export class AnalyticsController {
     @CurrentMerchant('id') merchantId: string,
     @Query('period') period?: string,
   ) {
-    return this.analyticsService.getOverview(merchantId, period || '30d');
+    return this.analyticsService.getOverview(merchantId, parsePeriod(period));
   }
 
   @Get('revenue')
@@ -24,8 +56,8 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getRevenue(
       merchantId,
-      period || '30d',
-      granularity || 'day',
+      parsePeriod(period),
+      parseGranularity(granularity),
     );
   }
 
@@ -36,7 +68,7 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getPaymentAnalytics(
       merchantId,
-      period || '30d',
+      parsePeriod(period),
     );
   }
 
@@ -47,7 +79,7 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getFailureAnalytics(
       merchantId,
-      period || '30d',
+      parsePeriod(period),
     );
   }
 
@@ -58,7 +90,7 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getCurrencyBreakdown(
       merchantId,
-      period || '30d',
+      parsePeriod(period),
     );
   }
 
@@ -69,7 +101,7 @@ export class AnalyticsController {
   ) {
     return this.analyticsService.getPayoutAnalytics(
       merchantId,
-      period || '30d',
+      parsePeriod(period),
     );
   }
 }
