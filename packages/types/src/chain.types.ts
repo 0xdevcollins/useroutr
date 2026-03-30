@@ -71,3 +71,14 @@ export interface CompleteSourceLockParams {
   lockId:   string;
   preimage: string;                  // the revealed secret (hex)
 }
+
+export interface SourceLockEvent {
+  lockId:   string;
+  sender:   string;
+  receiver: string;
+  amount:   bigint;
+  hashlock: string;
+  timelock: number;
+  token:    string;
+  chain:    Chain;
+}
