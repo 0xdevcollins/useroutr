@@ -1,0 +1,716 @@
+typescript
+// ---------------------------------------------------------------------------
+// Type Definitions
+// ---------------------------------------------------------------------------
+
+/**
+ * Supported analytics event names.
+ * Extend as needed.
+ */
+export type AnalyticsEventName =
+  | 'pricing_page_view'
+  | 'pricing_cta_click'
+  | 'pricing_form_start'
+  | 'pricing_volume_tier_interaction'
+  | 'page_view'
+  | 'generic_event';
+
+/**
+ * Strictly typed parameter map for each event.
+ * Ensures only valid params are accepted per event.
+ */
+interface EventParamMap {
+  pricing_page_view: { page_location: string };
+  pricing_cta_click: { cta_text: string; cta_href: string };
+  pricing_form_start: { form_type: string };
+  pricing_volume_tier_interaction: { tier_label: string; action: string };
+  page_view: { page_location: string };
+  generic_event: Record<string, string | number | boolean | undefined>;
+}
+
+/**
+ * A single analytics event with a discriminated union via `name`.
+ */
+interface AnalyticsEvent<T extends AnalyticsEventName> {
+  readonly name: T;
+  readonly params: EventParamMap[T];
+  /** Optional timestamp; defaults to Date.now() */
+  readonly timestamp?: number;
+}
+
+/**
+ * LinkedIn conversion definition.
+ */
+interface LinkedInConversion {
+  /** Unique name for deduplication and logging */
+  readonly name: string;
+  /** URL pattern the conversion applies to (regex string) */
+  readonly urlPattern: string;
+  /** Event trigger type */
+  readonly event: 'visit' | 'click';
+  /** Conversion type on LinkedIn side */
+  readonly type: 'PageView' | 'Lead';
+  /** CSS selector for click-based conversions */
+  readonly selector?: string;
+}
+
+/**
+ * Fully validated analytics configuration.
+ */
+export interface AnalyticsConfig {
+  readonly ga4MeasurementId: string;
+  readonly linkedinPartnerId: string;
+  readonly linkedinConversions: ReadonlyArray<LinkedInConversion>;
+  /** Optional: send events in development mode (default false) */
+  readonly isDevelopment?: boolean;
+  /** Optional: retry configuration for failed sends */
+  readonly retry?: {
+    readonly maxAttempts: number;
+    readonly baseDelayMs: number;
+  };
+}
+
+/**
+ * Minimal structured logger interface.
+ * Can be replaced with any logger (winston, pino, etc.) in the future.
+ */
+export interface Logger {
+  debug(message: string, meta?: Record<string, unknown>): void;
+  info(message: string, meta?: Record<string, unknown>): void;
+  warn(message: string, meta?: Record<string, unknown>): void;
+  error(message: string, error?: unknown, meta?: Record<string, unknown>): void;
+}
+
+// ---------------------------------------------------------------------------
+// Custom Errors
+// ---------------------------------------------------------------------------
+
+/**
+ * Base error for analytics module.
+ */
+export class AnalyticsError extends Error {
+  public readonly context?: Readonly<Record<string, unknown>>;
+
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message);
+    this.name = 'AnalyticsError';
+    this.context = context ? Object.freeze({ ...context }) : undefined;
+    Object.setPrototypeOf(this, AnalyticsError.prototype);
+  }
+}
+
+/**
+ * Configuration validation specific error.
+ */
+export class ConfigurationError extends AnalyticsError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, context);
+    this.name = 'ConfigurationError';
+  }
+}
+
+/**
+ * Error during event sending.
+ */
+export class SendError extends AnalyticsError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, context);
+    this.name = 'SendError';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Logger Implementation (Console-based with level filtering)
+// ---------------------------------------------------------------------------
+
+/**
+ * Log level priority mapping.
+ */
+const LOG_LEVELS: Readonly<Record<string, number>> = Object.freeze({
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+});
+
+/**
+ * Safely parses a log level string and returns the priority number.
+ * Defaults to info (1) if the provided string is invalid or missing.
+ *
+ * @param envValue - The raw environment variable value.
+ * @returns The numeric priority for the log level.
+ */
+function parseLogLevel(envValue: string | undefined): number {
+  if (!envValue) return 1;
+  const lower = envValue.trim().toLowerCase();
+  const priority = LOG_LEVELS[lower];
+  return priority !== undefined ? priority : 1;
+}
+
+/**
+ * Current log level determined by environment variable ANALYTICS_LOG_LEVEL.
+ * Defaults to 'info' (level 1).
+ */
+const currentLogLevel: number = parseLogLevel(process.env.ANALYTICS_LOG_LEVEL);
+
+/**
+ * Logger implementation using console with level filtering.
+ * Adds structured prefix and optional meta.
+ */
+export const logger: Readonly<Logger> = Object.freeze({
+  debug(message: string, meta?: Record<string, unknown>): void {
+    if (currentLogLevel <= 0) {
+      console.debug(`[Analytics:DEBUG] ${message}`, meta ?? '');
+    }
+  },
+  info(message: string, meta?: Record<string, unknown>): void {
+    if (currentLogLevel <= 1) {
+      console.info(`[Analytics:INFO] ${message}`, meta ?? '');
+    }
+  },
+  warn(message: string, meta?: Record<string, unknown>): void {
+    if (currentLogLevel <= 2) {
+      console.warn(`[Analytics:WARN] ${message}`, meta ?? '');
+    }
+  },
+  error(message: string, error?: unknown, meta?: Record<string, unknown>): void {
+    if (currentLogLevel <= 3) {
+      console.error(`[Analytics:ERROR] ${message}`, error ?? '', meta ?? '');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Configuration Validator
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates an analytics configuration object.
+ *
+ * @param config - Partial or full configuration object.
+ * @returns A fully validated, frozen `AnalyticsConfig`.
+ * @throws {ConfigurationError} If required fields are missing or invalid.
+ */
+export function validateConfig(config: Partial<AnalyticsConfig>): AnalyticsConfig {
+  const errors: string[] = [];
+
+  // Normalize optional strings to trimmed form or empty string
+  const ga4Id = (config.ga4MeasurementId ?? '').trim();
+  const liId = (config.linkedinPartnerId ?? '').trim();
+
+  // ga4MeasurementId
+  if (!ga4Id) {
+    errors.push('ga4MeasurementId is required and must be a non-empty string');
+  } else if (!/^G-[A-Z0-9]+$/.test(ga4Id)) {
+    errors.push('ga4MeasurementId must match pattern G-XXXXXXXX (e.g., G-ABCDEF123)');
+  }
+
+  // linkedinPartnerId
+  if (!liId) {
+    errors.push('linkedinPartnerId is required and must be a non-empty string');
+  } else if (!/^\d+$/.test(liId)) {
+    errors.push('linkedinPartnerId must be a numeric string (digits only)');
+  }
+
+  // linkedinConversions
+  if (!Array.isArray(config.linkedinConversions)) {
+    errors.push('linkedinConversions must be an array');
+  } else {
+    const seenNames = new Set<string>();
+    const validEvents = ['visit', 'click'] as const;
+    const validTypes = ['PageView', 'Lead'] as const;
+
+    for (const [index, conv] of config.linkedinConversions.entries()) {
+      const convName = (conv.name ?? '').trim();
+      if (!convName) {
+        errors.push(`linkedinConversions[${index}] missing or empty name`);
+      } else if (seenNames.has(convName)) {
+        errors.push(`linkedinConversions[${index}] duplicate name: "${convName}"`);
+      } else {
+        seenNames.add(convName);
+      }
+
+      if (!validEvents.includes(conv.event as typeof validEvents[number])) {
+        errors.push(`linkedinConversions[${index}] invalid event: "${conv.event}". Must be 'visit' or 'click'.`);
+      }
+
+      if (!validTypes.includes(conv.type as typeof validTypes[number])) {
+        errors.push(`linkedinConversions[${index}] invalid type: "${conv.type}". Must be 'PageView' or 'Lead'.`);
+      }
+
+      if (conv.selector !== undefined && typeof conv.selector !== 'string') {
+        errors.push(`linkedinConversions[${index}] selector must be a string if provided`);
+      }
+
+      if (conv.urlPattern && typeof conv.urlPattern === 'string') {
+        try {
+          new RegExp(conv.urlPattern);
+        } catch {
+          errors.push(`linkedinConversions[${index}] urlPattern "${conv.urlPattern}" is not a valid regex.`);
+        }
+      } else {
+        errors.push(`linkedinConversions[${index}] urlPattern must be a non-empty string`);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    const message = `Analytics config validation failed:\n${errors.join('\n')}`;
+    logger.error(message, null, { errors });
+    throw new ConfigurationError(message, { errors });
+  }
+
+  // Return frozen, deeply immutable configuration
+  return Object.freeze({
+    ga4MeasurementId: ga4Id,
+    linkedinPartnerId: liId,
+    linkedinConversions: config.linkedinConversions!.map((conv) =>
+      Object.freeze({
+        name: conv.name.trim(),
+        urlPattern: conv.urlPattern.trim(),
+        event: conv.event,
+        type: conv.type,
+        ...(conv.selector !== undefined ? { selector: conv.selector.trim() } : {}),
+      })
+    ),
+    isDevelopment: config.isDevelopment ?? false,
+    retry: config.retry
+      ? Object.freeze({
+          maxAttempts: config.retry.maxAttempts,
+          baseDelayMs: config.retry.baseDelayMs,
+        })
+      : undefined,
+  });
+}
+
+/**
+ * Loads and validates analytics configuration from environment variables.
+ *
+ * Expected env vars:
+ * - `NEXT_PUBLIC_GA4_MEASUREMENT_ID`
+ * - `NEXT_PUBLIC_LINKEDIN_PARTNER_ID`
+ * - `NEXT_PUBLIC_LINKEDIN_CONVERSIONS` (JSON string array of conversions)
+ *
+ * @param overrides - Optional overrides for testing or fallback.
+ * @returns A validated AnalyticsConfig.
+ * @throws {ConfigurationError} If required env vars are missing or invalid.
+ */
+export function loadAnalyticsConfigFromEnv(
+  overrides?: Partial<AnalyticsConfig>
+): AnalyticsConfig {
+  const rawConversions = process.env.NEXT_PUBLIC_LINKEDIN_CONVERSIONS;
+  let linkedinConversions: LinkedInConversion[] | undefined;
+
+  if (rawConversions) {
+    try {
+      const parsed = JSON.parse(rawConversions);
+      if (!Array.isArray(parsed)) {
+        throw new ConfigurationError('NEXT_PUBLIC_LINKEDIN_CONVERSIONS must be a JSON array');
+      }
+      linkedinConversions = parsed;
+    } catch (err) {
+      logger.error('Failed to parse LINKEDIN_CONVERSIONS env var', err);
+      linkedinConversions = [];
+    }
+  }
+
+  return validateConfig({
+    ga4MeasurementId:
+      overrides?.ga4MeasurementId ?? process.env.NEXT_PUBLIC_GA4_MEASUREMENT_ID ?? '',
+    linkedinPartnerId:
+      overrides?.linkedinPartnerId ?? process.env.NEXT_PUBLIC_LINKEDIN_PARTNER_ID ?? '',
+    linkedinConversions:
+      overrides?.linkedinConversions ?? linkedinConversions ?? [],
+    isDevelopment: overrides?.isDevelopment ?? process.env.NODE_ENV === 'development',
+    retry: overrides?.retry ?? { maxAttempts: 3, baseDelayMs: 500 },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Analytics Service
+// ---------------------------------------------------------------------------
+
+/**
+ * Default retry configuration.
+ */
+const DEFAULT_RETRY = { maxAttempts: 3, baseDelayMs: 500 } as const;
+
+/**
+ * Sleep helper for retry delay.
+ * @param ms - Milliseconds to sleep.
+ */
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Sends event to Google Analytics 4 via Measurement Protocol.
+ * Uses fetch with a timeout to avoid hanging.
+ *
+ * @param measurementId - GA4 measurement ID (G-XXXXXXXX).
+ * @param clientId - Anonymous client ID (from cookie or generated).
+ * @param eventName - Event name string.
+ * @param eventParams - Event parameters object.
+ * @param timeoutMs - Request timeout in ms (default 5000).
+ * @returns True if sent successfully.
+ * @throws {SendError} On network failure or non-2xx response.
+ */
+async function sendToGA4(
+  measurementId: string,
+  clientId: string,
+  eventName: string,
+  eventParams: Record<string, unknown>,
+  timeoutMs: number = 5000
+): Promise<boolean> {
+  const url = `https://www.google-analytics.com/mp/collect?measurement_id=${measurementId}&api_secret=${process.env.NEXT_PUBLIC_GA4_API_SECRET ?? ''}`;
+
+  const payload = {
+    client_id: clientId,
+    events: [
+      {
+        name: eventName,
+        params: eventParams,
+      },
+    ],
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new SendError(`GA4 responded with status ${response.status}`, {
+        status: response.status,
+        statusText: response.statusText,
+      });
+    }
+
+    logger.debug('GA4 event sent', { eventName, clientId });
+    return true;
+  } catch (err) {
+    if (err instanceof SendError) {
+      throw err;
+    }
+    throw new SendError('Failed to send event to GA4', { cause: err });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Sends a conversion event to LinkedIn.
+ *
+ * @param partnerId - LinkedIn partner ID.
+ * @param conversion - The LinkedInConversion configuration to use.
+ * @param pageUrl - The current page URL.
+ * @param timeoutMs - Request timeout in ms (default 5000).
+ */
+async function sendToLinkedIn(
+  partnerId: string,
+  conversion: LinkedInConversion,
+  pageUrl: string,
+  timeoutMs: number = 5000
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(
+      `https://px.ads.linkedin.com/collect/?pid=${partnerId}&conversionId=${conversion.name}&url=${encodeURIComponent(pageUrl)}`,
+      { method: 'GET', signal: controller.signal, mode: 'no-cors' }
+    );
+
+    // With no-cors, we cannot check status; assume success.
+    logger.debug('LinkedIn conversion sent', { conversion: conversion.name });
+    return true;
+  } catch (err) {
+    throw new SendError('Failed to send conversion to LinkedIn', {
+      cause: err,
+      conversion: conversion.name,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Executes a promise with retry logic.
+ *
+ * @param fn - Async function to execute.
+ * @param maxAttempts - Maximum number of attempts.
+ * @param baseDelayMs - Base delay in ms between attempts (exponential backoff with jitter).
+ * @returns The result of the function.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts: number,
+  baseDelayMs: number
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new SendError('Unknown error', { cause: err });
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * baseDelayMs;
+        logger.warn(`Retry attempt ${attempt}/${maxAttempts} after ${delay.toFixed(0)}ms`, {
+          error: lastError.message,
+        });
+        await sleep(delay);
+      }
+    }
+  }
+  throw lastError!;
+}
+
+/**
+ * Generates a consistent client ID stored in localStorage.
+ * Falls back to a random UUID.
+ */
+function getClientId(): string {
+  const key = '_analytics_client_id';
+  try {
+    let clientId = localStorage.getItem(key);
+    if (!clientId) {
+      clientId = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      localStorage.setItem(key, clientId);
+    }
+    return clientId;
+  } catch {
+    // localStorage unavailable (SSR or restricted)
+    return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
+}
+
+/**
+ * AnalyticsService - Centralized analytics tracking for GA4 and LinkedIn.
+ *
+ * Singleton class; instantiate via `getAnalyticsService()`.
+ */
+export class AnalyticsService {
+  private static _instance: AnalyticsService | undefined;
+
+  private readonly config: AnalyticsConfig;
+  private readonly clientId: string;
+  private readonly isBrowser: boolean;
+
+  /**
+   * Private constructor. Use `getInstance` or `init` to create.
+   * @param config - Validated analytics configuration.
+   */
+  private constructor(config: AnalyticsConfig) {
+    this.config = Object.freeze({ ...config });
+    this.clientId = getClientId();
+    this.isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+    logger.info('AnalyticsService initialized', {
+      ga4: config.ga4MeasurementId,
+      linkedinConversionsCount: config.linkedinConversions.length,
+    });
+  }
+
+  /**
+   * Returns the singleton instance. If not initialized, throws.
+   */
+  static getInstance(): AnalyticsService {
+    if (!AnalyticsService._instance) {
+      throw new AnalyticsError('AnalyticsService not initialized. Call init() first.');
+    }
+    return AnalyticsService._instance;
+  }
+
+  /**
+   * Initializes (or resets) the analytics service with a configuration.
+   * Typically called once at application startup.
+   *
+   * @param config - Validated analytics configuration.
+   */
+  static init(config: AnalyticsConfig): AnalyticsService {
+    AnalyticsService._instance = new AnalyticsService(config);
+    return AnalyticsService._instance;
+  }
+
+  /**
+   * Tracks a page view event.
+   * Respects development mode; does not send if config.isDevelopment is true.
+   *
+   * @param eventName - The event name (default 'page_view').
+   * @param overrides - Optional parameter overrides.
+   */
+  async trackPageView(
+    eventName: AnalyticsEventName = 'page_view',
+    overrides?: Partial<Record<string, string | number | boolean>>
+  ): Promise<void> {
+    if (!this.isBrowser) return; // SSR skip
+
+    const pageLocation = window.location.href;
+    this.trackEvent(eventName, { page_location: pageLocation, ...overrides } as EventParamMap[typeof eventName]);
+
+    // Also fire LinkedIn conversions if URL matches pattern
+    for (const conv of this.config.linkedinConversions) {
+      if (conv.event === 'visit' && new RegExp(conv.urlPattern).test(pageLocation)) {
+        await this.fireLinkedInConversion(conv, pageLocation);
+      }
+    }
+  }
+
+  /**
+   * Tracks a generic analytics event.
+   *
+   * @param name - Event name (must be in AnalyticsEventName).
+   * @param params - Event parameters typed per event.
+   */
+  async trackEvent<T extends AnalyticsEventName>(
+    name: T,
+    params: EventParamMap[T]
+  ): Promise<void> {
+    const event: AnalyticsEvent<T> = {
+      name,
+      params,
+      timestamp: Date.now(),
+    };
+
+    if (this.config.isDevelopment) {
+      logger.info(`[DEV] Skipping analytics send for event "${name}"`, { params });
+      return;
+    }
+
+    const retryConfig = this.config.retry ?? DEFAULT_RETRY;
+
+    try {
+      await withRetry(
+        () => sendToGA4(this.config.ga4MeasurementId, this.clientId, name, params as Record<string, unknown>),
+        retryConfig.maxAttempts,
+        retryConfig.baseDelayMs
+      );
+      logger.debug(`Event "${name}" sent successfully`);
+    } catch (err) {
+      logger.error(`Failed to send event "${name}" after retries`, err);
+      // Optionally could send to a fallback queue
+    }
+  }
+
+  /**
+   * Fires a LinkedIn conversion (used internally for page visit matching).
+   * Also called externally for click-based conversions.
+   *
+   * @param conversion - The LinkedInConversion definition.
+   * @param pageUrl - The current page URL.
+   */
+  async fireLinkedInConversion(
+    conversion: LinkedInConversion,
+    pageUrl: string = this.isBrowser ? window.location.href : ''
+  ): Promise<void> {
+    if (this.config.isDevelopment) {
+      logger.info(`[DEV] Skipping LinkedIn conversion "${conversion.name}"`);
+      return;
+    }
+
+    const retryConfig = this.config.retry ?? DEFAULT_RETRY;
+
+    try {
+      await withRetry(
+        () => sendToLinkedIn(this.config.linkedinPartnerId, conversion, pageUrl),
+        retryConfig.maxAttempts,
+        retryConfig.baseDelayMs
+      );
+      logger.debug(`LinkedIn conversion "${conversion.name}" sent`);
+    } catch (err) {
+      logger.error(`Failed to send LinkedIn conversion "${conversion.name}"`, err);
+    }
+  }
+
+  /**
+   * Attaches click listeners for LinkedIn conversions that are triggered by click.
+   * Should be called after DOM is ready (on mount).
+   */
+  attachConversionClickListeners(): void {
+    if (!this.isBrowser) return;
+
+    for (const conv of this.config.linkedinConversions) {
+      if (conv.event !== 'click' || !conv.selector) continue;
+
+      const elements = document.querySelectorAll(conv.selector);
+      if (elements.length === 0) {
+        logger.warn(`No elements found for conversion selector "${conv.selector}"`, { conversion: conv.name });
+        continue;
+      }
+
+      elements.forEach((el) => {
+        // Avoid duplicate listeners
+        if ((el as HTMLElement).dataset._analyticsAttached) return;
+        (el as HTMLElement).dataset._analyticsAttached = 'true';
+
+        el.addEventListener('click', () => {
+          this.fireLinkedInConversion(conv);
+        });
+      });
+    }
+  }
+
+  /**
+   * Removes all click listeners (cleanup).
+   * Note: this is a naive implementation clearing all listeners.
+   * For production, store references to listeners.
+   */
+  detachConversionClickListeners(): void {
+    if (!this.isBrowser) return;
+
+    for (const conv of this.config.linkedinConversions) {
+      if (conv.event !== 'click' || !conv.selector) continue;
+      const elements = document.querySelectorAll(conv.selector);
+      elements.forEach((el) => {
+        // With native DOM, we cannot easily remove specific listeners.
+        // This method is provided for consistency; use a custom event system in production.
+        delete (el as HTMLElement).dataset._analyticsAttached;
+      });
+    }
+  }
+}
+
+/**
+ * Convenience shorthand to get the global analytics service.
+ * Throws if not initialized.
+ */
+export const analytics: AnalyticsService = {
+  get trackPageView(): AnalyticsService['trackPageView'] {
+    return AnalyticsService.getInstance().trackPageView.bind(AnalyticsService.getInstance());
+  },
+  get trackEvent(): AnalyticsService['trackEvent'] {
+    return AnalyticsService.getInstance().trackEvent.bind(AnalyticsService.getInstance());
+  },
+  get fireLinkedInConversion(): AnalyticsService['fireLinkedInConversion'] {
+    return AnalyticsService.getInstance().fireLinkedInConversion.bind(AnalyticsService.getInstance());
+  },
+  get attachConversionClickListeners(): AnalyticsService['attachConversionClickListeners'] {
+    return AnalyticsService.getInstance().attachConversionClickListeners.bind(AnalyticsService.getInstance());
+  },
+  get detachConversionClickListeners(): AnalyticsService['detachConversionClickListeners'] {
+    return AnalyticsService.getInstance().detachConversionClickListeners.bind(AnalyticsService.getInstance());
+  },
+} as unknown as AnalyticsService;
+
+// ---------------------------------------------------------------------------
+// Initialization helper (can be called once in app entry point)
+// ---------------------------------------------------------------------------
+
+/**
+ * Initializes the analytics service from environment variables.
+ * Should be called once at application startup (e.g., in _app.tsx).
+ *
+ * @param overrides - Optional configuration overrides.
+ * @returns The initialized AnalyticsService instance.
+ */
+export function initializeAnalytics(
+  overrides?: Partial<AnalyticsConfig>
+): AnalyticsService {
+  const config = loadAnalyticsConfigFromEnv(overrides);
+  return AnalyticsService.init(config);
+}
