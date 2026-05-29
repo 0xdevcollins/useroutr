@@ -1,0 +1,40 @@
+---
+title: "We don't take an FX spread. Here's what we do instead."
+category: "Engineering"
+author: "Mira Adeoye"
+date: "2026-04-02"
+excerpt: "30 basis points, transparent, on the conversion line of the receipt. Not buried in the rate."
+readTime: "3 min"
+---
+
+30 basis points, transparent, on the conversion line of the receipt. Not buried in the rate.
+
+## The standard processor model
+
+Most payment processors make money two ways: a visible processing fee (e.g., 2.9% + $0.30) and a hidden FX spread. The spread is the gap between the mid-market rate and the rate they quote you. It's typically 1–3% on cross-currency transactions.
+
+The spread is invisible to the merchant. It shows up as a slightly worse rate than the one on Google Finance. Most merchants don't notice. The ones who do notice can't easily quantify it, because the mid-market rate at the moment of the transaction isn't on the receipt.
+
+This is not fraud. It's standard practice. But it's not transparent.
+
+## Our model
+
+We use the mid-market rate for every conversion. The rate we quote is the rate you'd get on a currency exchange at the moment of the transaction. We don't mark it up.
+
+Our fee is 30 basis points on the conversion amount, shown as a separate line on the receipt. If you're converting $1,000 of USDC from Ethereum to USDC on Stellar, the fee is $3.00. It's on the receipt. It's in the webhook payload. It's in the settlement report.
+
+## Why we can do this
+
+We don't run a market-making book. We're not taking the other side of the trade. CCTP V2 is the rail: USDC is burned on the source chain and minted on the destination chain. There's no FX exposure for us to hedge.
+
+The "FX spread" that traditional processors charge is partly a hedge against rate movement and partly margin. We don't have rate movement to hedge (USDC/USDC), so we don't need the spread.
+
+Our 30 basis points covers our operational costs and margin. It's a simpler model, and it's possible because we chose a stablecoin-native architecture.
+
+## Why merchants prefer it
+
+Two reasons. First, it's predictable. A merchant who processes $100,000/month knows their Useroutr fee is $300. They can budget for it. They can put it in a spreadsheet. They can explain it to their CFO.
+
+Second, it's separable for accounting. The conversion fee is a distinct line item, not embedded in the rate. For merchants who need to account for payment processing costs separately from FX costs — which is most businesses with a finance team — this matters. The fee goes in one bucket. The conversion goes in another. The receipt makes this easy.
+
+Transparent pricing is a product decision. We made it because we could, and because the merchants we want to work with are the ones who care about it.

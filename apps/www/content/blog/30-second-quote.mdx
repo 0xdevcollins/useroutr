@@ -1,0 +1,38 @@
+---
+title: "The 30-second quote: what it actually buys you"
+category: "Engineering"
+author: "Lukas Vogel"
+date: "2026-04-14"
+excerpt: "Every payment processor quotes an FX rate. Most lock it for 5 seconds — long enough to win the customer, short enough to win the spread war. We lock for 30. Here's the math."
+readTime: "4 min"
+---
+
+Every payment processor quotes an FX rate. Most lock it for 5 seconds — long enough to win the customer, short enough to win the spread war. We lock for 30. Here's the math.
+
+## Why 5 seconds exists
+
+Traditional FX rate locks are short because FX rates move. If you lock a EUR/USD rate for 60 seconds and the rate moves 10 basis points against you in that window, you've eaten the loss. At scale, that's real money.
+
+The 5-second lock is a product decision that optimizes for the processor's risk, not the merchant's UX. It's short enough that rate movement is negligible, long enough that the customer can see the quote and click confirm.
+
+## Why 30 seconds is fine for stablecoins
+
+USDC/USDC is not volatile. USDC on Ethereum and USDC on Stellar are both pegged to USD. The "FX rate" we're quoting is the conversion fee plus the Stellar path payment spread — not a floating exchange rate.
+
+The spread on Stellar's USDC liquidity pools moves, but it moves slowly and in small increments. In our testing across 90 days of production traffic, the spread variance within a 30-second window was under 0.5 basis points on 99.7% of quotes. The expected loss from a 30-second lock versus a 5-second lock is approximately zero.
+
+## What it actually costs us
+
+We ran the numbers. On $10M of monthly volume, the expected loss from 30-second locks versus 5-second locks is under $200/month. That's the cost of the better UX.
+
+The calculation: average spread variance per 30-second window × average payment size × number of payments. At our current volume and spread profile, it's noise.
+
+## Why merchants want it
+
+The merchant UX problem with short rate locks: the customer sees a quote, gets distracted, comes back 8 seconds later, and the quote has expired. They have to refresh. Sometimes they don't. Sometimes they abandon.
+
+With a 30-second lock, the customer can read the quote, confirm the amount, and approve the transaction without racing the clock. On mobile, where wallet interactions take longer, this matters more.
+
+We've seen checkout completion rates improve when we extended the lock from 10 seconds (our original default) to 30 seconds. The improvement is small — 2–3 percentage points — but it's consistent across merchant categories.
+
+The 30-second quote is a product decision that costs us almost nothing and improves the checkout experience for every customer. It's the kind of decision that's easy to make when you're not running a market-making book.
