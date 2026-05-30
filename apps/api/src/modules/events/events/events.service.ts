@@ -9,6 +9,15 @@ interface WebhookEventData {
   createdAt: Date | string;
 }
 
+interface NotificationCreatedPayload {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  metadata?: unknown;
+  createdAt: Date | string;
+}
+
 /**
  * Events Service
  * Handles real-time event emission to connected WebSocket clients
@@ -239,6 +248,35 @@ export class EventsService {
     } catch (error) {
       this.logger.error(
         `Failed to emit invoice paid notification: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  emitNotificationCreated(
+    merchantId: string,
+    notification: NotificationCreatedPayload,
+  ): void {
+    try {
+      const normalizedPayload = {
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        body: notification.body,
+        metadata: notification.metadata,
+        createdAt: new Date(notification.createdAt).toISOString(),
+      };
+
+      this.gateway.server
+        .to(`merchant:${merchantId}`)
+        .emit('notification.created', normalizedPayload);
+
+      this.gateway.server.to(`merchant:${merchantId}`).emit('message', {
+        event: 'notification.created',
+        data: normalizedPayload,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to emit notification.created: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

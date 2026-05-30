@@ -92,15 +92,13 @@ export default function PaymentLinksPage() {
   const { subscribe } = useDashboardSocket();
 
   useEffect(() => {
-    // Subscribe to payment link payment events
-    const unsubscribe = subscribe("payment-link.payment", (...args: unknown[]) => {
-      const payload = args[0] as { linkId: string; amount: number };
-      toast(`Payment received: $${payload.amount}`, "success");
+    // Refresh the link list when a real-time link payment event arrives.
+    const unsubscribe = subscribe("payment-link.payment", () => {
       refetch();
     });
 
     return () => unsubscribe();
-  }, [subscribe, toast, refetch]);
+  }, [subscribe, refetch]);
 
   const handleCreate = (data: CreatePaymentLinkInput) => {
     createMutation.mutate(data, {

@@ -41,6 +41,7 @@ model Merchant {
   teamMembers       TeamMember[]
   webhookEvents     WebhookEvent[]
   apiKeys           ApiKey[]
+  notifications     Notification[]
 }
 
 model ApiKey {
@@ -322,4 +323,18 @@ enum WebhookStatus {
   DELIVERED
   FAILED
   EXHAUSTED
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  merchantId String
+  type       String
+  title      String
+  body       String
+  read       Boolean  @default(false)
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, createdAt])
 }

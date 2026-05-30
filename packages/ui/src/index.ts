@@ -38,7 +38,13 @@ export {
   DialogDescription,
 } from "./components/dialog";
 export { Drawer } from "./components/drawer";
-export { ToastProvider, useToast } from "./components/toast";
+export {
+  Toast,
+  ToastProvider,
+  useToast,
+  type ToastProps,
+  type ToastVariant,
+} from "./components/toast";
 export { Skeleton } from "./components/skeleton";
 export { EmptyState } from "./components/empty-state";
 export { Pagination } from "./components/pagination";

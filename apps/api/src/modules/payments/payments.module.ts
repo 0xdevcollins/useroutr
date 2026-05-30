@@ -11,6 +11,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StripeWebhooksController } from '../webhooks/webhooks.controller';
 import { StellarModule } from '../stellar/stellar.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AuthModule } from '../auth/auth.module';
     QuotesModule,
     WebhooksModule,
     StellarModule,
+    NotificationsModule,
   ],
   providers: [PaymentsService],
   controllers: [

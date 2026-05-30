@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "prisma generate && nest build && cp generated/prisma/package.json dist/generated/prisma/package.json",
+    "build": "prisma generate && nest build && node -e \"const fs=require('fs'); const source=['generated/prisma/package.json','node_modules/.prisma/client/package.json','node_modules/@prisma/client/package.json'].find((file)=>fs.existsSync(file)); if(source){ fs.mkdirSync('dist/generated/prisma',{recursive:true}); fs.copyFileSync(source,'dist/generated/prisma/package.json'); }\"",
     "prisma:generate": "prisma generate",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

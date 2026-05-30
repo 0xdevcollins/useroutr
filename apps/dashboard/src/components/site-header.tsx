@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Moon, Monitor, SidebarIcon, Sun } from "lucide-react";
+import { Moon, Monitor, SidebarIcon, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,6 +20,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTheme } from "@/providers/ThemeProvider";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 const routeLabels: Record<string, string> = {
   "/": "Overview",
@@ -82,9 +83,7 @@ export function SiteHeader() {
         </Breadcrumb>
 
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Bell className="size-4" />
-          </Button>
+          <NotificationBell />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

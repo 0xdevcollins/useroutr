@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "@useroutr/ui/globals.css";
 
+@source "../../../../packages/ui/src";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

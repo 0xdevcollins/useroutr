@@ -4,6 +4,8 @@ import { Inter, Open_Sans } from "next/font/google";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { RealtimeToastNotifications } from "@/providers/RealtimeToastNotifications";
+import { NotificationsProvider } from "@/providers/NotificationsProvider";
 import "./globals.css";
 import { ToastProvider } from "@useroutr/ui";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -48,7 +50,12 @@ export default function RootLayout({
             <Suspense>
               <AuthProvider>
                 <TooltipProvider>
-                  <ToastProvider>{children}</ToastProvider>
+                  <ToastProvider>
+                    <NotificationsProvider>
+                      <RealtimeToastNotifications />
+                      {children}
+                    </NotificationsProvider>
+                  </ToastProvider>
                 </TooltipProvider>
               </AuthProvider>
             </Suspense>

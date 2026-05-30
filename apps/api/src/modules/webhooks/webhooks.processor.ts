@@ -3,6 +3,7 @@ import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import axios, { AxiosError } from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { WebhookStatus } from '@prisma/client';
 import {
   WEBHOOK_QUEUE_NAME,
@@ -22,6 +23,7 @@ export class WebhooksProcessor extends WorkerHost {
   constructor(
     @InjectQueue(WEBHOOK_QUEUE_NAME) private readonly webhookQueue: Queue,
     private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
   ) {
     super();
   }
@@ -116,6 +118,12 @@ export class WebhooksProcessor extends WorkerHost {
             nextRetryAt,
           },
         });
+
+        if (attempt === 1) {
+          void this.notifications
+            .notifyWebhookFailed(merchantId, webhookUrl, eventType, eventId)
+            .catch(() => undefined);
+        }
 
         this.logger.log(
           `Webhook ${eventId} will retry at ${nextRetryAt.toISOString()} (delay: ${delayMs}ms)`,

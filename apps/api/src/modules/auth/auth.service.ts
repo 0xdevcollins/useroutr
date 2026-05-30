@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type { Merchant } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { RegisterDto } from './dto/register.dto.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { JwtPayload } from './strategies/jwt.strategy.js';
@@ -52,6 +53,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -170,6 +172,10 @@ export class AuthService {
         mode: mode === 'live' ? 'LIVE' : 'TEST',
       },
     });
+
+    void this.notifications
+      .notifyApiKeyCreated(merchantId, apiKey.id, apiKey.name)
+      .catch(() => undefined);
 
     return {
       apiKey: plainTextKey,
