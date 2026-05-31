@@ -210,8 +210,6 @@ export class PaymentsService implements OnModuleInit {
       updatedPayment.id,
     );
 
-    
-
     const metadata =
       updatedPayment.metadata && typeof updatedPayment.metadata === 'object'
         ? (updatedPayment.metadata as Record<string, unknown>)
@@ -224,40 +222,13 @@ export class PaymentsService implements OnModuleInit {
           : undefined;
 
     if (status === PaymentStatus.COMPLETED) {
+      const receivedAmount = updatedPayment.destAmount?.toString() ?? '0';
+
       void this.notificationsService
         .notifyPaymentReceived(
           updatedPayment.merchantId,
           updatedPayment.id,
-          updatedPayment.destAmount.toString(),
-          updatedPayment.destAsset || 'USD',
-          customerEmail,
-        )
-        .catch(() => undefined);
-    }
-
-    if (status === PaymentStatus.REFUNDING) {
-      void this.notificationsService
-        .notifyRefundInitiated(updatedPayment.merchantId, updatedPayment.id)
-        .catch(() => undefined);
-    }
-
-    const metadata =
-      updatedPayment.metadata && typeof updatedPayment.metadata === 'object'
-        ? (updatedPayment.metadata as Record<string, unknown>)
-        : {};
-    const customerEmail =
-      typeof metadata.customerEmail === 'string'
-        ? metadata.customerEmail
-        : typeof metadata.email === 'string'
-          ? metadata.email
-          : undefined;
-
-    if (status === PaymentStatus.COMPLETED) {
-      void this.notificationsService
-        .notifyPaymentReceived(
-          updatedPayment.merchantId,
-          updatedPayment.id,
-          updatedPayment.destAmount.toString(),
+          receivedAmount,
           updatedPayment.destAsset || 'USD',
           customerEmail,
         )
@@ -453,9 +424,13 @@ export class PaymentsService implements OnModuleInit {
     const payment = await this.prisma.payment.create({
       data: {
         merchantId: internal.merchant.id,
+        quoteId: null,
         status: PaymentStatus.PENDING,
         // Source fields stay null until the customer picks a method.
         // Quote stays null too — created when the method is chosen.
+        sourceChain: null,
+        sourceAsset: null,
+        sourceAmount: null,
         destChain: internal.merchant.settlementChain,
         destAsset: internal.merchant.settlementAsset,
         destAmount,
