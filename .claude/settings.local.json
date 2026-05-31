@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/bin/cat /Users/0xdevcollins/Documents/startups/tavvio/apps/dashboard/src/components/brand/Wordmark.tsx)",
+      "Bash(/usr/bin/head -40)",
+      "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/common -type f)",
+      "Bash(/usr/bin/grep -rE '/health|/ready|@Get' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src --include='*.controller.ts')",
+      "Bash(/usr/bin/grep -iE 'health|ready')",
+      "Bash(/usr/bin/head -5)",
+      "Bash(/usr/bin/tail -50 /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/app.module.ts)",
+      "Bash(/bin/cat /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/common/decorators/public-route.decorator.ts)",
+      "Bash(/bin/cat /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/modules/prisma/prisma.module.ts)",
+      "Bash(/usr/bin/grep -rn 'JwtAuthGuard\\\\|APP_GUARD' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src --include='*.ts')",
+      "Bash(/usr/bin/grep -v '.spec.ts')",
+      "Bash(/usr/bin/grep -rn 'InjectRedis\\\\|@nestjs-modules/ioredis' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src --include='*.ts')",
+      "Bash(/usr/bin/grep -E 'STELLAR_HORIZON|HORIZON_URL' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/.env)",
+      "Bash(/usr/bin/grep -rEn 'STELLAR_HORIZON|HORIZON_URL' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src --include='*.ts')",
+      "Bash(/usr/bin/head -3)",
+      "Bash(/usr/bin/grep -E '\"module\"|\"target\"|\"moduleResolution\"' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/tsconfig.json)",
+      "Bash(/usr/bin/head -8 /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/modules/auth/auth.module.ts)",
+      "Bash(/usr/bin/curl -sf http://localhost:3333/healthz -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(/usr/bin/curl -s http://localhost:3333/readyz -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(/usr/bin/head -20)",
+      "Bash(/usr/bin/curl -s -D - http://localhost:3333/healthz -H 'X-Request-Id: my-trace-abc')",
+      "Bash(/usr/bin/grep -i 'x-request-id\\\\|http')",
+      "Bash(/usr/bin/curl -s -D - http://localhost:3333/healthz)",
+      "Bash(/usr/bin/grep -i 'x-request-id')",
+      "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/dashboard/src -name 'api.ts' -o -name 'api.client.ts' -o -name 'fetch.ts')",
+      "Bash(/usr/bin/grep -rEn \"['\\\\\"]\\\\/auth/|['\\\\\"]\\\\/payments|['\\\\\"]\\\\/links|['\\\\\"]\\\\/payouts|['\\\\\"]\\\\/invoices|baseURL|API_URL\" /Users/0xdevcollins/Documents/startups/tavvio/apps/dashboard/src --include='*.ts' --include='*.tsx')",
+      "Bash(/usr/bin/grep -v 'app/\\(auth\\)\\\\|app/\\(dashboard\\)')",
+      "Bash(/bin/cat /Users/0xdevcollins/Documents/startups/tavvio/apps/dashboard/.env)",
+      "Bash(/bin/cat /Users/0xdevcollins/Documents/startups/tavvio/apps/dashboard/next.config.ts)",
+      "Bash(/usr/bin/head -30)",
+      "Bash(/usr/bin/grep -n 'sub\\\\|JwtPayload\\\\|interface.*Payload' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/modules/auth/strategies/jwt.strategy.ts)",
+      "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/modules/auth -name '*.ts' -not -name '*.spec.ts')",
+      "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/common -name '*.spec.ts')"
+    ]
+  }
+}

@@ -27,7 +27,7 @@ describe('NotificationsProcessor', () => {
             get: jest.fn((key: string, defaultValue?: string) => {
               const config: Record<string, string> = {
                 RESEND_API_KEY: 're_test_key',
-                EMAIL_FROM: 'test@useroutr.io',
+                EMAIL_FROM: 'test@useroutr.com',
               };
               return config[key] ?? defaultValue;
             }),
@@ -57,7 +57,7 @@ describe('NotificationsProcessor', () => {
     await processor.process(job);
 
     expect(mockSend).toHaveBeenCalledWith({
-      from: 'test@useroutr.io',
+      from: 'test@useroutr.com',
       to: ['user@example.com'],
       subject: 'Test Subject',
       html: '<p>Test</p>',

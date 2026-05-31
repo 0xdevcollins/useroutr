@@ -9,7 +9,7 @@ import {
 import Redis from 'ioredis';
 import { StellarService } from '../stellar/stellar.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BridgeRouterService } from '../bridge/bridge-router.service';
+import { RouterService } from '../cctp/router.service';
 import { Quote } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 type Decimal = Prisma.Decimal;
@@ -28,7 +28,7 @@ export class QuotesService {
     @InjectRedis() private readonly redis: Redis,
     private readonly prisma: PrismaService,
     private readonly stellar: StellarService,
-    private readonly bridgeRouter: BridgeRouterService,
+    private readonly bridgeRouter: RouterService,
   ) {}
 
   /**

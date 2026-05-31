@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useTheme } from "@/providers/ThemeProvider";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { ThemeToggle } from "@/components/brand/ThemeToggle";
+
 
 const routeLabels: Record<string, string> = {
   "/": "Overview",

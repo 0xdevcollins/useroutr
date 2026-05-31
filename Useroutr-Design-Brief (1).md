@@ -49,17 +49,17 @@ Useroutr has three distinct user types. Design decisions must always be pressure
 
 Useroutr consists of five product modules plus a public marketing site. Each module has its own primary user, flow, and design priority. The full design scope covers all six areas.
 
-## **3.1  Marketing Website (useroutr.io)**
+## **3.1  Marketing Website (useroutr.com)**
 
 The public-facing landing page and documentation site. This is the first impression for both developers and business owners. It must immediately communicate what Useroutr does, why it matters, and how to get started.
 
 | Homepage / Landing Page Hero section with headline, 2-sentence value prop, CTA (Join Waitlist, Try It Out, View Docs). Below the fold: product overview, key differentiators, supported chains/currencies grid, testimonials section, and a video demo block. Footer with 'A product of thirtn.com'.  Marketing  High Priority  Conversion-Critical  |
 | :---- |
 
-| Documentation Hub (docs.useroutr.io) Developer-facing documentation site. Left sidebar navigation tree, right-side content area with code blocks, copy-to-clipboard, language switcher (JS/Python/Go), and an API reference explorer. Dark and light mode required.  Dev-Facing  High Priority  Dual Theme  |
+| Documentation Hub (docs.useroutr.com) Developer-facing documentation site. Left sidebar navigation tree, right-side content area with code blocks, copy-to-clipboard, language switcher (JS/Python/Go), and an API reference explorer. Dark and light mode required.  Dev-Facing  High Priority  Dual Theme  |
 | :---- |
 
-## **3.2  Merchant Dashboard (dashboard.useroutr.io)**
+## **3.2  Merchant Dashboard (dashboard.useroutr.com)**
 
 The primary interface for business owners and their teams. This is where merchants manage their payment operations day-to-day. Desktop-first, with responsive mobile support.
 
@@ -87,7 +87,7 @@ The primary interface for business owners and their teams. This is where merchan
 | Settings API key management (generate, rotate, delete). Webhook endpoint config with event checkboxes and delivery logs. Team members and role management. Branding (logo, color for hosted checkout). Compliance / KYC status.  Config  Multi-Tab  |
 | :---- |
 
-## **3.3  Hosted Checkout (checkout.useroutr.io)**
+## **3.3  Hosted Checkout (checkout.useroutr.com)**
 
 The payment-facing surface that end consumers see when paying through a Useroutr-powered business. Must be clean, trustworthy, and optimized for conversion. This is mobile-first.
 
@@ -299,7 +299,7 @@ The following flows must be fully mapped in Figma as interactive prototypes befo
 
 ## **Flow 1 — Developer Onboarding**
 
-| Entry: Developer lands on useroutr.io, clicks 'Start Building' |
+| Entry: Developer lands on useroutr.com, clicks 'Start Building' |
 | :---- |
 | 1\. Marketing site → Sign up form (name, email, company, password) |
 | 2\. Email verification → Redirect to dashboard |
@@ -426,8 +426,8 @@ The following rules are absolute. They are not up for creative interpretation. D
 | wise.com | Multi-currency, global payments — very similar mental model |
 | vercel.com/dashboard | Dark mode dashboard done right for technical users |
 | phosphoricons.com | Our icon library — study the full set |
-| docs.useroutr.io (this brief) | The product this brief describes |
+| docs.useroutr.com (this brief) | The product this brief describes |
 | Chainrails.io | Closest competitor — understand what to differentiate from |
 
-| Questions? Contact the Useroutr team. useroutr.io  ·  docs.useroutr.io  ·  A product of thirtn.com Version 1.0  ·  February 2026  ·  Confidential |
+| Questions? Contact the Useroutr team. useroutr.com  ·  docs.useroutr.com  ·  A product of thirtn.com Version 1.0  ·  February 2026  ·  Confidential |
 | :---: |

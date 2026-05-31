@@ -1,26 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowRight, ArrowLeft, Check } from "lucide-react";
 import { z } from "zod";
 
-import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@useroutr/ui";
-import Logo from "../../../../public/logo.svg";
+import { AuthScaffold } from "@/components/brand/AuthScaffold";
 
 const schema = z.object({
-  email: z.string().email("Please enter a valid email address"),
+  email: z.string().email("Enter a valid email"),
 });
 
 export default function ForgotPasswordPage() {
@@ -32,21 +21,18 @@ export default function ForgotPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
     const result = schema.safeParse({ email });
     if (!result.success) {
       setError(result.error.issues[0].message);
       return;
     }
-
     setIsSubmitting(true);
     try {
       await api.post("/auth/forgot-password", { email });
       setIsSubmitted(true);
-    } catch (err) {
-      // Always show success to prevent email enumeration
+    } catch {
+      // Always show success to prevent enumeration
       setIsSubmitted(true);
-      void err;
     } finally {
       setIsSubmitting(false);
     }
@@ -54,102 +40,113 @@ export default function ForgotPasswordPage() {
 
   if (isSubmitted) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-        <div className="w-full max-w-sm">
-          <div className="flex flex-col gap-6">
-            <FieldGroup>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <Link href="/" className="flex flex-col items-center gap-2 font-medium">
-                  <Image src={Logo} alt="Useroutr" width={120} height={40} />
-                </Link>
-                <h1 className="text-xl font-bold">Check your email</h1>
-                <FieldDescription>
-                  If an account exists for <strong>{email}</strong>, we&apos;ve sent
-                  a password reset link. Check your spam folder if you don&apos;t see it.
-                </FieldDescription>
-              </div>
-
-              <Field>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setIsSubmitted(false);
-                    setEmail("");
-                  }}
-                >
-                  Try a different email
-                </Button>
-              </Field>
-            </FieldGroup>
-
-            <p className="text-center text-sm text-muted-foreground">
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-1 font-semibold text-primary transition-colors hover:text-primary/80"
-              >
-                <ArrowLeft className="size-3.5" />
-                Back to sign in
-              </Link>
-            </p>
+      <AuthScaffold
+        illustration="forgot-password"
+        eyebrow="Check your inbox"
+        title={
+          <>
+            On its <span className="editorial-italic">way.</span>
+          </>
+        }
+        description={
+          <>
+            If an account exists for{" "}
+            <span className="font-medium text-foreground">{email}</span>,
+            we&apos;ve sent a password reset link. Check spam if it
+            doesn&apos;t land in a couple of minutes.
+          </>
+        }
+        footnote={
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-1 link-underline text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to sign in
+          </Link>
+        }
+      >
+        <div className="rounded-lg border border-border bg-card p-5">
+          <div className="flex items-center gap-3">
+            <span className="grid size-8 place-items-center rounded-full bg-accent text-white">
+              <Check className="size-4" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-[14px] font-medium text-foreground">
+                Reset email sent
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                The link is valid for 24 hours.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+        <button
+          type="button"
+          onClick={() => {
+            setIsSubmitted(false);
+            setEmail("");
+          }}
+          className="mt-4 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full border border-border bg-card text-[14px] font-medium text-foreground transition-colors hover:border-foreground"
+        >
+          Try a different email
+        </button>
+      </AuthScaffold>
     );
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className={cn("flex flex-col gap-6")}>
-          <form onSubmit={handleSubmit} noValidate>
-            <FieldGroup>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <Link href="/" className="flex flex-col items-center gap-2 font-medium">
-                  <Image src={Logo} alt="Useroutr" width={120} height={40} />
-                </Link>
-                <h1 className="text-xl font-bold">Forgot your password?</h1>
-                <FieldDescription>
-                  Enter your email and we&apos;ll send you a reset link.
-                </FieldDescription>
-              </div>
-
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="merchant@company.com"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (error) setError("");
-                  }}
-                  autoComplete="email"
-                  required
-                />
-                {error && <FieldError>{error}</FieldError>}
-              </Field>
-
-              <Field>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Sending..." : "Send Reset Link"}
-                </Button>
-              </Field>
-            </FieldGroup>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-1 font-semibold text-primary transition-colors hover:text-primary/80"
-            >
-              <ArrowLeft className="size-3.5" />
-              Back to sign in
-            </Link>
-          </p>
-        </div>
-      </div>
-    </div>
+    <AuthScaffold
+      illustration="forgot-password"
+      eyebrow="Reset password"
+      title={
+        <>
+          Forgot your <span className="editorial-italic">password?</span>
+        </>
+      }
+      description="Enter your email and we'll send you a link to set a new one."
+      footnote={
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-1 link-underline text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to sign in
+        </Link>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        <label className="block">
+          <span className="eyebrow block">Work email</span>
+          <span className="mt-2 block">
+            <input
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError("");
+              }}
+              autoComplete="email"
+              required
+              className="h-11 w-full rounded-lg border border-border bg-card px-3.5 text-[14px] text-foreground placeholder:text-text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+            />
+          </span>
+          {error && (
+            <span className="mt-1.5 block text-[12px] text-destructive">
+              {error}
+            </span>
+          )}
+        </label>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="magnet mt-2 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-accent text-[14px] font-semibold text-foreground transition-colors hover:bg-accent-ink hover:text-white disabled:opacity-60"
+        >
+          {isSubmitting ? "Sending…" : "Send reset link"}
+          {!isSubmitting && <ArrowRight className="size-4" strokeWidth={1.6} />}
+        </button>
+      </form>
+    </AuthScaffold>
   );
 }

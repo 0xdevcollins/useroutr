@@ -32,7 +32,8 @@ The Quote Service has been fully implemented with path finding, rate locking, an
 **Path Finding Logic:**
 - **Same chain & asset**: Returns 1:1 rate, applies merchant fee only
 - **Stellar-to-Stellar**: Uses `StellarService.findStrictSendPaths()` to find liquidity
-- **Cross-chain**: Uses simplified 1:1 rate (production would integrate price oracles)
+- **Cross-chain USDC**: Routed through CCTP V2 (burn-and-mint, 8–20s Fast Transfer) — see `apps/api/src/modules/cctp/`
+- **Cross-chain non-USDC**: Not supported (decision: USDC-only for cross-chain — see `apps/api/docs/architecture/cctp-v2-migration-plan.md`)
 
 ### 2. Stellar Service Extension (`stellar.service.ts`)
 **New Method:**
@@ -85,7 +86,7 @@ GET /v1/quotes/:id
   rate: string,
   fee: string,                // Fee amount
   feeBps: number,
-  bridgeProvider: string | null,  // "cctp" | "wormhole" | "layerswap" | null
+  bridgeProvider: string | null,  // "cctp_v2" | "stellar_native" | null
   estimatedTimeMs: number,
   expiresAt: string,          // ISO 8601 timestamp
   expiresInSeconds: number,   // Convenience field for frontend
@@ -131,14 +132,16 @@ Example: $100 payment with 50 bps (0.5%) fee:
 ```
 
 ## Bridge Route Determination
-The `BridgeRouterService` selects the optimal bridge based on chains and asset:
+The `RouterService` (in the CCTP V2 module) selects the route based on chains and asset:
 
-| From | To | Asset | Provider | Time |
-|------|----|----|----------|------|
-| stellar | stellar | any | NATIVE | 5s |
-| * | starknet OR starknet | * | LAYERSWAP | 120s |
-| CCTP chains | CCTP chains | USDC | CCTP | 30s |
-| * | * | * | WORMHOLE | 60s (default) |
+| From | To | Asset | Provider | Time | Notes |
+|------|----|----|----------|------|-------|
+| stellar | stellar | any | `stellar_native` | ~5s | Horizon path payments |
+| any CCTP V2 chain | any CCTP V2 chain | USDC | `cctp_v2` (Fast) | 8–20s | Default. Includes Stellar (domain 27) + 24 EVM chains. |
+| any CCTP V2 chain | any CCTP V2 chain | USDC | `cctp_v2` (Standard) | ~15–19 min | Free, used for large amounts on L1 |
+| anything else | anything else | non-USDC | — | — | Not supported. Decision: USDC-only for cross-chain. |
+
+See `apps/api/src/modules/cctp/router.service.ts` for the decision tree and `apps/api/docs/architecture/cctp-v2-migration-plan.md` for the rationale behind the USDC-only commitment.
 
 ## Error Handling
 
@@ -197,7 +200,7 @@ The `BridgeRouterService` selects the optimal bridge based on chains and asset:
 - [x] Missing liquidity returns 422 with clear error message
 - [x] Quote expires if not consumed within 30 seconds
 - [x] Same-chain same-asset quotes use 1:1 rate
-- [x] Cross-chain routing is determined by BridgeRouter
+- [x] Cross-chain routing is determined by the CCTP V2 RouterService
 
 ## Testing Coverage
 Comprehensive unit tests implemented in `quotes.service.spec.ts`:
@@ -213,7 +216,7 @@ Comprehensive unit tests implemented in `quotes.service.spec.ts`:
 ## Integration Points
 - **PrismaService**: Database operations (create, update, findUnique)
 - **StellarService**: Path finding for Stellar conversions
-- **BridgeRouterService**: Route selection and estimated time lookup
+- **RouterService** (CCTP V2 module): Route selection and estimated time lookup
 - **Redis**: High-speed quote locking and TTL management
 - **MerchantService**: Merchant configuration lookup (via Prisma)
 - **CombinedAuthGuard**: API key authentication

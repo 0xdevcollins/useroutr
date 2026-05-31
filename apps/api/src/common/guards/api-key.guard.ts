@@ -35,7 +35,7 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException({
         code: 'unauthorized',
         message: 'Missing API key',
-        docs: 'https://docs.useroutr.io/errors/unauthorized',
+        docs: 'https://docs.useroutr.com/errors/unauthorized',
       });
     }
 
@@ -45,7 +45,7 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException({
         code: 'unauthorized',
         message: 'Invalid API key format',
-        docs: 'https://docs.useroutr.io/errors/unauthorized',
+        docs: 'https://docs.useroutr.com/errors/unauthorized',
       });
     }
 
@@ -71,7 +71,7 @@ export class ApiKeyGuard implements CanActivate {
           throw new UnauthorizedException({
             code: 'unauthorized',
             message: 'Merchant not found',
-            docs: 'https://docs.useroutr.io/errors/unauthorized',
+            docs: 'https://docs.useroutr.com/errors/unauthorized',
           });
         }
 
@@ -100,7 +100,7 @@ export class ApiKeyGuard implements CanActivate {
           throw new UnauthorizedException({
             code: 'unauthorized',
             message: 'Merchant not found',
-            docs: 'https://docs.useroutr.io/errors/unauthorized',
+            docs: 'https://docs.useroutr.com/errors/unauthorized',
           });
         }
 
@@ -112,7 +112,7 @@ export class ApiKeyGuard implements CanActivate {
     throw new UnauthorizedException({
       code: 'unauthorized',
       message: 'Invalid or missing API key',
-      docs: 'https://docs.useroutr.io/errors/unauthorized',
+      docs: 'https://docs.useroutr.com/errors/unauthorized',
     });
   }
 }

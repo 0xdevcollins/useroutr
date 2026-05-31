@@ -11,18 +11,19 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { QuotesService } from './quotes.service';
-import { BridgeRouterService } from '../../modules/bridge/bridge-router.service';
+import { RouterService } from '../cctp/router.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard';
 import { CurrentMerchant } from '../../common/decorators/current-merchant.decorator';
 
-@Controller('v1/quotes')
+// Global `/v1` prefix is set in main.ts — controller routes are relative.
+@Controller('quotes')
 @UseGuards(CombinedAuthGuard)
 export class QuotesController {
   constructor(
     private readonly quotesService: QuotesService,
-    private readonly bridgeRouter: BridgeRouterService,
+    private readonly bridgeRouter: RouterService,
   ) {}
 
   /**

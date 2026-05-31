@@ -24,6 +24,7 @@ import {
 } from "@/hooks/useSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { motion } from "framer-motion";
+import { EmptyState as BrandEmptyState } from "@/components/brand/EmptyState";
 import {
   Users,
   UserPlus,
@@ -277,23 +278,11 @@ export default function TeamPage() {
             );
           })
         ) : (
-          <motion.div
-            className="surface p-10 text-center"
-            variants={fadeUp}
-            initial="hidden"
-            animate="visible"
-            custom={1}
-          >
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
-              <Users size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm font-medium text-foreground">
-              No team members yet
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Invite someone to get started
-            </p>
-          </motion.div>
+          <BrandEmptyState
+            variant="team"
+            title="No team members yet"
+            body="Invite teammates to access this workspace. Roles and permissions land in v1.1; for now everyone joins as Owner."
+          />
         )}
       </div>
 

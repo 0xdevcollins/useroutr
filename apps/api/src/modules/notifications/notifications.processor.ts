@@ -26,7 +26,7 @@ export class NotificationsProcessor extends WorkerHost {
     this.resend = new Resend(apiKey);
     this.fromEmail = this.configService.get<string>(
       'EMAIL_FROM',
-      'noreply@useroutr.io',
+      'noreply@useroutr.com',
     );
   }
 

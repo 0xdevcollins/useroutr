@@ -8,6 +8,7 @@ interface Quote {
   toAmount: number;
   toCurrency: string;
   rate: number;
+  fee: number;
   expiresAt: string;
 }
 

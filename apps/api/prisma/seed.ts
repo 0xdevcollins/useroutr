@@ -241,8 +241,6 @@ async function main() {
           destAmount: q.toAmount,
           destAddress: 'GBZXN7PIRZGNMHGA7MUUUF4GWPY5AHDKSTEBKHL5USQV7IRG3OVRRM',
           destTxHash: isComplete ? `stellar_dest_tx_${i}` : undefined,
-          hashlock: `sha256_hashlock_${i.toString(16).padStart(64, '0')}`,
-          secretRevealed: isComplete,
           metadata: {
             orderId: `ORD-${1000 + i}`,
             customerEmail: `customer${i}@example.com`,
@@ -549,7 +547,7 @@ async function main() {
       payload: {
         paymentId: p.id,
         status: 'PENDING',
-        amount: p.sourceAmount.toString(),
+        amount: p.sourceAmount?.toString() ?? '0',
       },
       status: 'DELIVERED' as const,
       attempts: 1,
@@ -562,7 +560,7 @@ async function main() {
       payload: {
         paymentId: p.id,
         status: 'COMPLETED',
-        amount: p.destAmount.toString(),
+        amount: p.destAmount?.toString() ?? '0',
       },
       status: 'DELIVERED' as const,
       attempts: 1,

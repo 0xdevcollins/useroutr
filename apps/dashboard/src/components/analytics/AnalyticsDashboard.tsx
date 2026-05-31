@@ -1298,44 +1298,53 @@ export default function AnalyticsDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
+    <div className="space-y-8 dashboard-enter">
+      {/* Editorial header — matches the rest of the dashboard */}
+      <motion.header
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-col gap-4 border-b border-rule pb-6 md:flex-row md:items-end md:justify-between md:gap-8"
       >
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h2 className="font-display text-xl font-semibold text-foreground">
-              Analytics
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Revenue over time, conversion rates, payment method mix, failure
-              patterns, and top currencies for merchants.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 xl:items-end">
-            <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
-              {headerSubtitle}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <DateRangePicker
-                range={range}
-                onChange={handleRangeChange}
-                onClear={handleClearRange}
-              />
-              <ExportButton
-                disabled={!snapshot}
-                onExport={() => downloadCsv(snapshot, period, range)}
-              />
-            </div>
-          </div>
+        <div className="min-w-0">
+          <span className="eyebrow">Analytics</span>
+          <h1
+            className="mt-3 text-[32px] leading-[1.05] tracking-[-0.035em] text-foreground md:text-[40px]"
+            style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
+          >
+            Revenue, conversion,{" "}
+            <span className="editorial-italic text-muted-foreground">
+              and the gaps.
+            </span>
+          </h1>
+          <p className="mt-2 max-w-2xl text-[14px] text-muted-foreground md:text-[15px]">
+            Revenue over time, conversion rates, payment method mix, failure
+            patterns, and top currencies — across all chains and rails.
+          </p>
         </div>
 
-        <SourceNotice note={note} />
-      </motion.div>
+        <div className="flex shrink-0 flex-col gap-3 md:items-end">
+          <div
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-[12px] text-muted-foreground"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {headerSubtitle}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              range={range}
+              onChange={handleRangeChange}
+              onClear={handleClearRange}
+            />
+            <ExportButton
+              disabled={!snapshot}
+              onExport={() => downloadCsv(snapshot, period, range)}
+            />
+          </div>
+        </div>
+      </motion.header>
+
+      <SourceNotice note={note} />
 
       {isSnapshotEmpty(snapshot) ? (
         <EmptyState onReset={resetFilters} />

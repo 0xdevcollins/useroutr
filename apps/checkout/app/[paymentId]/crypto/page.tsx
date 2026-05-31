@@ -1,21 +1,27 @@
 "use client";
 import { OrderSummary } from "@/components/OrderSummary";
 import { CryptoPayment } from "@/components/CryptoPayment";
-import { QuoteCountdown } from "@/components/QuoteCountdown";
 import { TrustBadges } from "@/components/TrustBadges";
 import { MerchantBranding } from "@/components/MerchantBranding";
 import { usePayment } from "@/hooks/usePayment";
 import { useParams } from "next/navigation";
 
+/**
+ * Crypto checkout page. Composes:
+ *   - MerchantBranding (logo + name)
+ *   - OrderSummary (amount + description)
+ *   - CryptoPayment (the actual CCTP V2 flow — chain picker → quote → sign → poll)
+ *
+ * QuoteCountdown was removed in PR 7.8c: the quote is now scoped to the
+ * crypto leg (30s) rather than the whole payment, and CryptoPayment shows
+ * the lock window inline when a quote is active. The page-level countdown
+ * was confusing customers between the 30-min payment expiry and the 30s
+ * quote lock — collapsed into one place.
+ */
 export default function CryptoPaymentPage() {
   const params = useParams();
   const paymentId = params.paymentId as string;
   const { data: payment } = usePayment(paymentId);
-
-  const handleQuoteExpired = () => {
-    // In a real implementation, this would trigger a quote refresh
-    console.log("Quote expired, need to refresh");
-  };
 
   if (!payment) {
     return (
@@ -38,10 +44,6 @@ export default function CryptoPaymentPage() {
           amount={payment.amount}
           currency={payment.currency}
           description={payment.description}
-        />
-        <QuoteCountdown
-          expiresAt={payment.expiresAt}
-          onExpired={handleQuoteExpired}
         />
         <CryptoPayment
           paymentId={paymentId}

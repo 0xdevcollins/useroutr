@@ -16,6 +16,8 @@ import {
 } from "@useroutr/ui";
 import { Plus, MagnifyingGlass, Link as LinkIcon } from "@phosphor-icons/react";
 import { useToast } from "@useroutr/ui";
+import { PageHeader } from "@/components/brand/PageHeader";
+import { EmptyState as BrandEmptyState } from "@/components/brand/EmptyState";
 import { LinkCard } from "@/components/links/LinkCard";
 import { CreateLinkModal } from "@/components/links/CreateLinkModal";
 import { LinkCreatedModal } from "@/components/links/LinkCreatedModal";
@@ -147,17 +149,25 @@ export default function PaymentLinksPage() {
   const showNoLinks = !hasActiveFilters && !hasLinks;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl font-semibold text-foreground">
-          Payment Links
-        </h2>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          <Plus size={18} />
-          New Link
-        </Button>
-      </div>
+    <div className="space-y-8 dashboard-enter">
+      <PageHeader
+        eyebrow="Payment links"
+        title={
+          <>
+            Shareable URLs that{" "}
+            <span className="editorial-italic text-muted-foreground">
+              actually pay.
+            </span>
+          </>
+        }
+        description="Fixed amount or open, single-use or reusable. Generate a link and share it anywhere — checkout opens on click."
+        actions={
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            <Plus size={18} />
+            New link
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -224,16 +234,14 @@ export default function PaymentLinksPage() {
           }
         />
       ) : showNoLinks ? (
-        <EmptyState
-          icon={LinkIcon}
+        <BrandEmptyState
+          variant="links"
           title="No payment links yet"
-          description="Create your first payment link to start accepting payments"
-          action={
-            <Button onClick={() => setIsCreateModalOpen(true)}>
-              <Plus size={18} />
-              Create Link
-            </Button>
-          }
+          body="Create a shareable URL with a fixed or open amount, optional expiry, and single-use lock. We'll handle the checkout."
+          cta={{
+            label: "Create your first link",
+            onClick: () => setIsCreateModalOpen(true),
+          }}
         />
       ) : null}
 

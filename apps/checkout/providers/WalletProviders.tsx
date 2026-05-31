@@ -5,51 +5,54 @@ import { WagmiProvider, http } from "wagmi";
 import {
   mainnet,
   sepolia,
-  polygon,
   arbitrum,
+  arbitrumSepolia,
   optimism,
+  optimismSepolia,
   base,
-  bsc,
+  baseSepolia,
+  avalanche,
+  avalancheFuji,
 } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
-import type { Chain } from "wagmi/chains";
 
-const avalanche = {
-  id: 43_114,
-  name: "Avalanche C-Chain",
-  nativeCurrency: {
-    decimals: 18,
-    name: "Avalanche",
-    symbol: "AVAX",
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://api.avax.network/ext/bc/C/rpc"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "SnowTrace",
-      url: "https://snowtrace.io",
-    },
-  },
-} as const satisfies Chain;
-
+// Chain list matches the enabled CCTP V2 EVM domains in
+// apps/api/src/modules/cctp/domains.ts. If a chain isn't listed here, the
+// network switcher won't offer it and the burn flow on the API will reject
+// `select-crypto` with a "not enabled" error — both layers stay in sync.
+//
+// Testnet variants are included because the API picks chain ids based on
+// STELLAR_NETWORK (testnet → sepolia variants, mainnet → mainnet). The
+// frontend doesn't know which side the API is on; including both lets
+// RainbowKit's switcher offer whichever the customer's wallet is on.
 const config = getDefaultConfig({
   appName: "Useroutr Checkout",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "placeholder",
-  chains: [mainnet, sepolia, polygon, arbitrum, optimism, base, bsc, avalanche],
+  chains: [
+    mainnet,
+    sepolia,
+    arbitrum,
+    arbitrumSepolia,
+    optimism,
+    optimismSepolia,
+    base,
+    baseSepolia,
+    avalanche,
+    avalancheFuji,
+  ],
   ssr: true,
   transports: {
     [mainnet.id]: http(),
     [sepolia.id]: http(),
-    [polygon.id]: http(),
     [arbitrum.id]: http(),
+    [arbitrumSepolia.id]: http(),
     [optimism.id]: http(),
+    [optimismSepolia.id]: http(),
     [base.id]: http(),
-    [bsc.id]: http(),
+    [baseSepolia.id]: http(),
     [avalanche.id]: http(),
+    [avalancheFuji.id]: http(),
   },
 });
 

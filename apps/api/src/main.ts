@@ -63,6 +63,15 @@ async function bootstrap() {
     new LoggingInterceptor(),
   );
 
+  // ── URL versioning ──────────────────────────────────────────────────────────
+  // Every controller is mounted under /v1/* so integrators can pin a version
+  // and we can cut a clean /v2 later. Health endpoints are deliberately
+  // excluded — external monitors (Better Stack, k8s probes, ELB) shouldn't
+  // have to track API version cuts.
+  app.setGlobalPrefix('v1', {
+    exclude: ['healthz', 'readyz', '/'],
+  });
+
   await app.listen(process.env.PORT ?? 3000);
 
   console.log(

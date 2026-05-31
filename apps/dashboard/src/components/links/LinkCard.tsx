@@ -2,11 +2,6 @@
 
 import { cn } from "@/lib/utils";
 import {
-  Card,
-  CardHeader,
-  CardContent,
-  CardFooter,
-  Separator,
   Button,
   Tooltip,
   TooltipTrigger,
@@ -14,6 +9,7 @@ import {
   TooltipProvider,
 } from "@useroutr/ui";
 import { QrCode, Trash } from "@phosphor-icons/react";
+import { motion } from "framer-motion";
 import { formatCurrency } from "@/lib/utils";
 import { LinkStatusBadge } from "./LinkStatusBadge";
 import { CopyButton } from "./CopyButton";
@@ -25,6 +21,11 @@ interface LinkCardProps {
   onDeactivate: (link: PaymentLink) => void;
 }
 
+/**
+ * Editorial payment-link card. Replaces the shadcn Card chrome with the
+ * site's `surface` pattern — hairline-divided rows, mono ID label, big
+ * display amount, status badge top-right.
+ */
 export function LinkCard({ link, onQRCode, onDeactivate }: LinkCardProps) {
   const isExpired = link.status === "expired";
   const isDeactivated = link.status === "deactivated";
@@ -41,59 +42,81 @@ export function LinkCard({ link, onQRCode, onDeactivate }: LinkCardProps) {
   const isSingleUse = link.type === "single-use";
 
   return (
-    <Card
+    <motion.article
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        "transition-all duration-200 hover:shadow-md",
-        isExpired && "opacity-60",
-        isDeactivated && "opacity-50"
+        "group flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-shadow hover:shadow-[0_18px_40px_-24px_rgba(14,15,18,0.18)]",
+        (isExpired || isDeactivated) && "opacity-70",
       )}
     >
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
-        <p className="truncate text-xs text-[var(--muted-foreground)]">{link.id}</p>
+      {/* Header — mono ID + status */}
+      <div className="flex items-center justify-between gap-2 border-b border-rule px-5 py-3">
+        <span
+          className="truncate text-[11px] text-text-faint"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          {link.id}
+        </span>
         <LinkStatusBadge status={link.status} />
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-3">
-        {/* Amount + Type */}
-        <div className="flex items-center justify-between">
-          <span className="text-lg font-bold text-[var(--foreground)]">
+      {/* Amount block */}
+      <div className="px-5 pb-2 pt-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <span
+            className="text-[28px] leading-none tracking-[-0.025em] text-foreground tabular"
+            style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
+          >
             {link.amount
               ? formatCurrency(link.amount, link.currency)
-              : "Open Amount"}
+              : "Open amount"}
           </span>
-          <span className="text-xs font-medium text-[var(--muted-foreground)]">
+          <span
+            className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.06em] text-text-faint"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
             {isSingleUse ? "Single-use" : "Multi-use"}
           </span>
         </div>
-
-        {/* Description */}
         {link.description && (
-          <p className="text-sm text-[var(--muted-foreground)] line-clamp-2">
+          <p className="mt-3 line-clamp-2 text-[13px] text-muted-foreground">
             {link.description}
           </p>
         )}
+      </div>
 
-        {/* Usage + Expiry */}
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-[var(--muted-foreground)]">
-            Used: <span className="font-medium text-[var(--foreground)]">{link.usageCount}</span> times
-          </span>
-          {expiryLabel ? (
-            <span className="text-[var(--muted-foreground)]">
-              Expires: <span className="font-medium text-[var(--foreground)]">{expiryLabel}</span>
-            </span>
-          ) : (
-            <span className="text-[var(--muted-foreground)]">No expiry</span>
-          )}
+      {/* Meta row — Used × · Expires */}
+      <dl
+        className="grid grid-cols-2 gap-px border-y border-rule bg-rule"
+        style={{ fontFamily: "var(--font-mono)" }}
+      >
+        <div className="flex flex-col gap-0.5 bg-card px-5 py-3">
+          <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">
+            Used
+          </dt>
+          <dd className="text-[13px] text-foreground">
+            {link.usageCount}× times
+          </dd>
         </div>
-      </CardContent>
+        <div className="flex flex-col gap-0.5 bg-card px-5 py-3">
+          <dt className="text-[10px] uppercase tracking-[0.12em] text-text-faint">
+            Expires
+          </dt>
+          <dd className="text-[13px] text-foreground">
+            {expiryLabel ?? "Never"}
+          </dd>
+        </div>
+      </dl>
 
-      <Separator />
-
-      <CardFooter className="gap-2 pt-4">
+      {/* Footer — actions */}
+      <div className="flex items-center gap-2 px-5 py-3">
         <TooltipProvider>
-          <CopyButton value={link.url} feedbackText="Copied!" className="flex-1" />
-
+          <CopyButton
+            value={link.url}
+            feedbackText="Copied"
+            className="flex-1"
+          />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -103,13 +126,12 @@ export function LinkCard({ link, onQRCode, onDeactivate }: LinkCardProps) {
                 onClick={() => onQRCode(link)}
                 className="flex-1"
               >
-                <QrCode size={16} />
-                QR Code
+                <QrCode size={14} />
+                QR
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Generate QR code for this link</TooltipContent>
+            <TooltipContent>Generate a QR code for this link</TooltipContent>
           </Tooltip>
-
           {canDeactivate && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -118,16 +140,16 @@ export function LinkCard({ link, onQRCode, onDeactivate }: LinkCardProps) {
                   variant="outline"
                   size="sm"
                   onClick={() => onDeactivate(link)}
-                  className="text-[var(--red)] hover:bg-[var(--red)]/10 hover:text-[var(--red)]"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
-                  <Trash size={16} />
+                  <Trash size={14} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Deactivate this link</TooltipContent>
             </Tooltip>
           )}
         </TooltipProvider>
-      </CardFooter>
-    </Card>
+      </div>
+    </motion.article>
   );
 }

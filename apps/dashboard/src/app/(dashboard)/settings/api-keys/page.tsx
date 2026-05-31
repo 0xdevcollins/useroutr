@@ -22,6 +22,7 @@ import {
 } from "@/hooks/useSettings";
 import { formatDate, formatLastUsed } from "@/lib/utils/time";
 import { motion } from "framer-motion";
+import { EmptyState as BrandEmptyState } from "@/components/brand/EmptyState";
 import {
   KeyRound,
   Copy,
@@ -240,23 +241,11 @@ export default function ApiKeysPage() {
           ))}
         </div>
       ) : (
-        <motion.div
-          className="surface p-10 text-center"
-          variants={fadeUp}
-          initial="hidden"
-          animate="visible"
-          custom={2}
-        >
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
-            <KeyRound size={20} className="text-muted-foreground" />
-          </div>
-          <p className="text-sm font-medium text-foreground">
-            No API keys yet
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Generate a key to start integrating with Useroutr
-          </p>
-        </motion.div>
+        <BrandEmptyState
+          variant="api-keys"
+          title="No API keys yet"
+          body="Generate a sandbox key to start integrating. Keys are hashed with Argon2id — we'll only show the secret once at creation."
+        />
       )}
 
       {/* Sandbox info */}
