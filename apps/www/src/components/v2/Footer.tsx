@@ -12,10 +12,11 @@ const columns: { title: string; links: LinkItem[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Hosted checkout", href: "/#product" },
-      { label: "Pay by link", href: "/#product" },
-      { label: "Invoices", href: "/#product" },
-      { label: "Global payouts", href: "/#product" },
+      { label: "Products", href: "/products" },
+      { label: "Hosted checkout", href: "/products/hosted-checkout" },
+      { label: "Pay by link", href: "/products/payment-links" },
+      { label: "Invoices", href: "/products/invoicing" },
+      { label: "Global payouts", href: "/products/global-payouts" },
       { label: "Pricing", href: "/pricing" },
     ],
   },
@@ -33,6 +34,7 @@ const columns: { title: string; links: LinkItem[] }[] = [
         href: "https://docs.useroutr.com/webhooks",
         external: true,
       },
+      { label: "Integrations", href: "/integrations" },
       { label: "Status", href: "https://status.useroutr.com", external: true },
       { label: "Changelog", href: "/changelog" },
     ],
@@ -44,7 +46,8 @@ const columns: { title: string; links: LinkItem[] }[] = [
       { label: "Use cases", href: "/use-cases" },
       { label: "Customers", href: "/customers" },
       { label: "Press", href: "/press" },
-      { label: "Contact", href: "mailto:hello@useroutr.com" },
+      { label: "Blog", href: "/blog" },
+      { label: "Contact", href: "/contact" },
     ],
   },
   {
