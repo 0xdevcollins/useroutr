@@ -4,8 +4,11 @@ import { Hanken_Grotesk, Fraunces, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { RealtimeToastNotifications } from "@/providers/RealtimeToastNotifications";
+import { NotificationsProvider } from "@/providers/NotificationsProvider";
 import "./globals.css";
 import { ToastProvider } from "@useroutr/ui";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Hanken Grotesk — display + body. Same family as the marketing site so the
 // brand voice is unbroken between useroutr.com and dashboard.useroutr.com.
@@ -56,7 +59,14 @@ export default function RootLayout({
           <QueryProvider>
             <Suspense>
               <AuthProvider>
-                <ToastProvider>{children}</ToastProvider>
+                <TooltipProvider>
+                  <ToastProvider>
+                    <NotificationsProvider>
+                      <RealtimeToastNotifications />
+                      {children}
+                    </NotificationsProvider>
+                  </ToastProvider>
+                </TooltipProvider>
               </AuthProvider>
             </Suspense>
           </QueryProvider>

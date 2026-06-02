@@ -172,13 +172,13 @@ export default function PayoutsPage() {
     setOffset(0);
   };
 
-  const toggleBatchExpansion = (batchId: string) => {
+  const toggleBatchExpansion = (id: string) => {
     setExpandedBatches((prev) => {
       const next = new Set(prev);
-      if (next.has(batchId)) {
-        next.delete(batchId);
+      if (next.has(id)) {
+        next.delete(id);
       } else {
-        next.add(batchId);
+        next.add(id);
       }
       return next;
     });
@@ -192,17 +192,9 @@ export default function PayoutsPage() {
   const handleRetry = async (id: string) => {
     try {
       await retryMutation.mutateAsync(id);
-      toast({
-        title: "Payout Retried",
-        description: "The payout has been queued for retry.",
-        variant: "default",
-      });
+      toast("The payout has been queued for retry.", "success");
     } catch (err) {
-      toast({
-        title: "Retry Failed",
-        description: err instanceof Error ? err.message : "Failed to retry payout",
-        variant: "destructive",
-      });
+      toast(err instanceof Error ? err.message : "Failed to retry payout", "error");
     }
   };
 
@@ -216,17 +208,9 @@ export default function PayoutsPage() {
     try {
       await cancelMutation.mutateAsync(selectedPayout.id);
       setCancelModalOpen(false);
-      toast({
-        title: "Payout Cancelled",
-        description: "The payout has been cancelled successfully.",
-        variant: "default",
-      });
+      toast("The payout has been cancelled successfully.", "success");
     } catch (err) {
-      toast({
-        title: "Cancel Failed",
-        description: err instanceof Error ? err.message : "Failed to cancel payout",
-        variant: "destructive",
-      });
+      toast(err instanceof Error ? err.message : "Failed to cancel payout", "error");
     }
   };
 
@@ -252,10 +236,10 @@ export default function PayoutsPage() {
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
               <span className="text-xs font-medium">
-                {payout.recipientName.charAt(0).toUpperCase()}
+                {(payout.recipientName ?? "?").charAt(0).toUpperCase()}
               </span>
             </div>
-            <span className="font-medium">{payout.recipientName}</span>
+            <span className="font-medium">{payout.recipientName ?? "—"}</span>
           </div>
         ),
       },
@@ -283,7 +267,7 @@ export default function PayoutsPage() {
         sortable: false,
         render: (payout) => (
           <span className="text-xs text-muted-foreground">
-            {payout.destinationType.replace("_", " ")}
+            {String(payout.destinationType ?? "").replace("_", " ")}
           </span>
         ),
       },
@@ -291,7 +275,9 @@ export default function PayoutsPage() {
         key: "status",
         header: "Status",
         sortable: false,
-        render: (payout) => <PayoutStatusBadge status={payout.status} />,
+        render: (payout) => (
+          <PayoutStatusBadge status={(payout.status ?? "PENDING") as PayoutStatus} />
+        ),
       },
       {
         key: "createdAt",
@@ -299,7 +285,7 @@ export default function PayoutsPage() {
         sortable: false,
         render: (payout) => (
           <span className="text-sm text-muted-foreground">
-            {new Date(payout.createdAt).toLocaleDateString("en-US", {
+            {new Date(String(payout.createdAt)).toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -330,7 +316,7 @@ export default function PayoutsPage() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleCancelClick(payout);
+                  handleCancelClick(payout as Payout);
                 }}
                 disabled={cancelMutation.isPending}
                 className="flex items-center gap-1 rounded-sm px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/50"
@@ -350,7 +336,7 @@ export default function PayoutsPage() {
 
   const availableCurrencies = useMemo(() => {
     const currencies = new Set<string>();
-    payouts.forEach((p) => currencies.add(p.currency));
+    payouts.forEach((p: Payout) => currencies.add(p.currency));
     return Array.from(currencies).sort();
   }, [payouts]);
 
@@ -419,19 +405,19 @@ export default function PayoutsPage() {
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground">Pending</p>
               <p className="mt-2 text-2xl font-semibold text-amber-600">
-                {payouts.filter((p) => p.status === "PENDING").length.toLocaleString()}
+                {payouts.filter((p: Payout) => p.status === "PENDING").length.toLocaleString()}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground">Completed</p>
               <p className="mt-2 text-2xl font-semibold text-green-600">
-                {payouts.filter((p) => p.status === "COMPLETED").length.toLocaleString()}
+                {payouts.filter((p: Payout) => p.status === "COMPLETED").length.toLocaleString()}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground">Failed</p>
               <p className="mt-2 text-2xl font-semibold text-red-600">
-                {payouts.filter((p) => p.status === "FAILED").length.toLocaleString()}
+                {payouts.filter((p: Payout) => p.status === "FAILED").length.toLocaleString()}
               </p>
             </div>
           </>
@@ -488,18 +474,16 @@ export default function PayoutsPage() {
           </Button>
         </div>
       ) : groupByBatch && groupedPayouts ? (
-        // ── Batch Grouped View ─────────────────────────────────────────────────
         <div className="space-y-4">
-          {/* Batched Payouts */}
-          {Array.from(groupedPayouts.batched.entries()).map(([batchId, batchPayouts]) => (
-            <div key={batchId} className="space-y-2">
+          {Array.from(groupedPayouts.batched.entries()).map(([bid, batchPayouts]) => (
+            <div key={bid} className="space-y-2">
               <BatchGroupHeader
-                batchId={batchId}
+                batchId={bid}
                 payouts={batchPayouts}
-                isExpanded={expandedBatches.has(batchId)}
-                onToggle={() => toggleBatchExpansion(batchId)}
+                isExpanded={expandedBatches.has(bid)}
+                onToggle={() => toggleBatchExpansion(bid)}
               />
-              {expandedBatches.has(batchId) && (
+              {expandedBatches.has(bid) && (
                 <div className="pl-4">
                   <DataTable<PayoutWithIndex>
                     columns={columns}
@@ -512,8 +496,6 @@ export default function PayoutsPage() {
               )}
             </div>
           ))}
-
-          {/* Unbatched Payouts */}
           {groupedPayouts.unbatched.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-medium text-muted-foreground">
@@ -531,7 +513,6 @@ export default function PayoutsPage() {
           )}
         </div>
       ) : (
-        // ── Flat Table View ───────────────────────────────────────────────────
         <DataTable<PayoutWithIndex>
           columns={columns}
           data={payouts as PayoutWithIndex[]}
@@ -543,7 +524,6 @@ export default function PayoutsPage() {
         />
       )}
 
-      {/* ── Empty State with Filter Clear ──────────────────────────────────────── */}
       {!isLoading && payouts.length === 0 && hasActiveFilters && (
         <div className="text-center">
           <Button variant="outline" onClick={resetFilters}>
@@ -552,7 +532,6 @@ export default function PayoutsPage() {
         </div>
       )}
 
-      {/* ── Pagination ─────────────────────────────────────────────────────────── */}
       {!groupByBatch && (
         <Pagination
           page={Math.floor(offset / limit) + 1}
@@ -568,18 +547,16 @@ export default function PayoutsPage() {
         />
       )}
 
-      {/* ── Detail Drawer ────────────────────────────────────────────────────────── */}
       <PayoutDetailDrawer
         payout={selectedPayout}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         onRetry={selectedPayout?.status === "FAILED" ? handleRetry : undefined}
-        onCancel={selectedPayout?.status === "PENDING" ? handleCancelClick : undefined}
+        onCancel={selectedPayout?.status === "PENDING" ? (_id: string) => handleCancelClick(selectedPayout) : undefined}
         isRetrying={retryMutation.isPending}
         isCancelling={cancelMutation.isPending}
       />
 
-      {/* ── Cancel Confirmation Modal ────────────────────────────────────────────── */}
       <CancelConfirmationModal
         open={cancelModalOpen}
         onOpenChange={setCancelModalOpen}
@@ -592,4 +569,3 @@ export default function PayoutsPage() {
     </div>
   );
 }
-

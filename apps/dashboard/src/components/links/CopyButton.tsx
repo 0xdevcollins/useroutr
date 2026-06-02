@@ -23,8 +23,8 @@ export function CopyButton({
       await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+    } catch {
+      // Clipboard can be denied in some browser contexts.
     }
   };
 

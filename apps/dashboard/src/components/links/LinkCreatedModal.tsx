@@ -36,8 +36,8 @@ export function LinkCreatedModal({
       await navigator.clipboard.writeText(linkUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+    } catch {
+      // Clipboard can be denied in some browser contexts.
     }
   };
 
@@ -105,7 +105,7 @@ export function LinkCreatedModal({
             {/* QR Code Preview */}
             <div className="space-y-2">
               <Label>QR Code</Label>
-              <div className="flex items-center justify-center rounded-lg border border-[var(--border)] bg-white p-4">
+              <div className="flex items-center justify-center rounded-lg border border-[var(--border)] bg-card p-4">
                 <QRCodeSVG
                   value={linkUrl}
                   size={150}

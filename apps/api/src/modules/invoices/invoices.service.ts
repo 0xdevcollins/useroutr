@@ -510,6 +510,10 @@ export class InvoicesService {
     });
 
     if (newStatus === InvoiceStatus.PAID) {
+      void this.notifications
+        .notifyInvoicePaid(merchantId, id, existing.invoiceNumber)
+        .catch(() => undefined);
+
       await this.webhooks.dispatch(merchantId, 'invoice.paid', {
         invoiceId: id,
         customerEmail: existing.customerEmail,

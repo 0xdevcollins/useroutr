@@ -9,6 +9,8 @@ import { DestType, Payout, PayoutStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { StellarService } from '../stellar/stellar.service';
+import { EventsService } from '../events/events/events.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePayoutDto, BulkPayoutDto } from './dto/create-payout.dto';
 import { PayoutFiltersDto } from './dto/payout-filters.dto';
 import { randomUUID } from 'crypto';
@@ -42,6 +44,8 @@ export class PayoutsService {
     private readonly prisma: PrismaService,
     private readonly webhooks: WebhooksService,
     private readonly stellar: StellarService,
+    private readonly eventsService: EventsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Create single payout ──────────────────────────────────────────────────
@@ -254,6 +258,25 @@ export class PayoutsService {
         where: { id: payout.id },
         data: { status: PayoutStatus.FAILED, failureReason },
       });
+      this.eventsService.emitPayoutStatus(
+        payout.merchantId,
+        payout.id,
+        PayoutStatus.FAILED,
+        {
+          amount: failed.amount.toString(),
+          currency: failed.currency,
+          failureReason,
+          updatedAt: new Date(),
+        },
+      );
+      void this.notifications
+        .notifyPayoutFailed(
+          payout.merchantId,
+          payout.id,
+          payout.recipientName,
+          failureReason,
+        )
+        .catch(() => undefined);
       this.webhooks
         .dispatch(payout.merchantId, 'payout.failed', {
           ...this.webhookPayload(failed),
@@ -306,6 +329,25 @@ export class PayoutsService {
         stellarTxHash: txHash,
       },
     });
+
+    this.eventsService.emitPayoutStatus(
+      payout.merchantId,
+      payout.id,
+      PayoutStatus.COMPLETED,
+      {
+        amount: completed.amount.toString(),
+        currency: completed.currency,
+        stellarTxHash: txHash,
+        updatedAt: new Date(),
+      },
+    );
+    void this.notifications
+      .notifyPayoutCompleted(
+        payout.merchantId,
+        payout.id,
+        payout.recipientName,
+      )
+      .catch(() => undefined);
 
     this.webhooks
       .dispatch(payout.merchantId, 'payout.completed', {

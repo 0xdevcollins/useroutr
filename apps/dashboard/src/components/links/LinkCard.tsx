@@ -14,6 +14,7 @@ import { formatCurrency } from "@/lib/utils";
 import { LinkStatusBadge } from "./LinkStatusBadge";
 import { CopyButton } from "./CopyButton";
 import type { PaymentLink } from "@useroutr/types";
+import Link from "next/link";
 
 interface LinkCardProps {
   link: PaymentLink;
@@ -52,12 +53,13 @@ export function LinkCard({ link, onQRCode, onDeactivate }: LinkCardProps) {
     >
       {/* Header — mono ID + status */}
       <div className="flex items-center justify-between gap-2 border-b border-rule px-5 py-3">
-        <span
-          className="truncate text-[11px] text-text-faint"
-          style={{ fontFamily: "var(--font-mono)" }}
-        >
-          {link.id}
-        </span>
+          <Link
+            href={`/links/${link.id}`}
+            className="truncate text-[11px] text-text-faint hover:text-foreground transition-colors"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {link.id}
+          </Link>
         <LinkStatusBadge status={link.status} />
       </div>
 

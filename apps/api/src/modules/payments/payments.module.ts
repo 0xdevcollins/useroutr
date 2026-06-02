@@ -13,6 +13,7 @@ import { QuotesModule } from '../quotes/quotes.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StripeWebhooksController } from '../webhooks/webhooks.controller';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { LinksModule } from '../links/links.module';
 import { CctpModule } from '../cctp/cctp.module';
 
@@ -36,6 +37,7 @@ import { CctpModule } from '../cctp/cctp.module';
     // (not CctpModule) so the processor can inject PaymentsService without
     // a module-level circular dependency.
     BullModule.registerQueue({ name: CCTP_OBSERVE_QUEUE }),
+    NotificationsModule,
   ],
   providers: [PaymentsService, CctpProcessor],
   controllers: [

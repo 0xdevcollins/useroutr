@@ -7,6 +7,7 @@ import {
   useUpdateMerchantProfile,
   useProvisionSettlement,
 } from "@/hooks/useSettings";
+import { useToastNotificationPreference } from "@/hooks/useToastNotificationPreference";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -18,6 +19,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import { Radio } from "@phosphor-icons/react";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 12 },
@@ -33,6 +35,10 @@ export default function SettingsPage() {
   const { data: merchant, isLoading: isLoadingProfile } =
     useMerchantProfile();
   const updateProfile = useUpdateMerchantProfile();
+  const {
+    enabled: realtimeNotificationsEnabled,
+    setEnabled: setRealtimeNotificationsEnabled,
+  } = useToastNotificationPreference();
   const provisionSettlement = useProvisionSettlement();
 
   const [name, setName] = useState("");
@@ -59,6 +65,16 @@ export default function SettingsPage() {
         onError: (err) =>
           toast(err.message || "Failed to save settings.", "error"),
       },
+    );
+  };
+
+  const handleRealtimeNotificationsToggle = (checked: boolean) => {
+    setRealtimeNotificationsEnabled(checked);
+    toast(
+      checked
+        ? "Real-time notifications enabled."
+        : "Real-time notifications disabled.",
+      checked ? "success" : "info",
     );
   };
 
@@ -254,6 +270,39 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-5 space-y-2">
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-secondary/30 p-4 cursor-pointer transition-all duration-200 hover:bg-secondary/60">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background">
+                <Radio size={15} className="text-primary" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    Enable real-time notifications
+                  </p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      realtimeNotificationsEnabled
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {realtimeNotificationsEnabled ? "On" : "Off"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Show live payment, payout, invoice, and webhook updates in-app
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={realtimeNotificationsEnabled}
+              onCheckedChange={handleRealtimeNotificationsToggle}
+              aria-label="Enable real-time notifications"
+              className="data-[state=checked]:bg-emerald-500"
+            />
+          </label>
+
           {[
             {
               label: "Email notifications",

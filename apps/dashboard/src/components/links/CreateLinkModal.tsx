@@ -40,12 +40,16 @@ export function CreateLinkModal({
   const [expiryDate, setExpiryDate] = useState("");
 
   const handleSubmit = () => {
+    if (amountType === "fixed" && (!amount || Number.isNaN(amount) || amount <= 0)) {
+      return;
+    }
+
     const data: CreatePaymentLinkInput = {
       description: description || undefined,
       single_use: isSingleUse,
     };
 
-    if (amountType === "fixed" && amount) {
+    if (amountType === "fixed") {
       data.amount = amount;
       data.currency = currency;
     }
@@ -57,7 +61,10 @@ export function CreateLinkModal({
     onCreate(data);
   };
 
-  const canSubmit = !hasExpiry || expiryDate !== "";
+  const isFixedAmountValid =
+    amountType === "open" ||
+    (typeof amount === "number" && !Number.isNaN(amount) && amount > 0);
+  const canSubmit = isFixedAmountValid && (!hasExpiry || expiryDate !== "");
 
   const handleReset = () => {
     setAmountType("fixed");

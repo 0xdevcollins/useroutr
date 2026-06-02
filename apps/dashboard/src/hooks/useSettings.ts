@@ -247,3 +247,16 @@ export function useRetryWebhookDelivery() {
     },
   });
 }
+
+// ─── Settlement Provisioning ─────────────────────────────────────────────────
+
+export function useProvisionSettlement() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ stellarAddress: string }, Error, void>({
+    mutationFn: () => api.post("/merchants/me/settlement/provision"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["merchant-profile"] });
+    },
+  });
+}

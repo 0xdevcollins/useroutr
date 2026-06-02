@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Input,
-  Select,
   EmptyState,
   Skeleton,
   Dialog,
@@ -13,6 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  Pagination,
 } from "@useroutr/ui";
 import { Plus, MagnifyingGlass, Link as LinkIcon } from "@phosphor-icons/react";
 import { useToast } from "@useroutr/ui";
@@ -23,12 +23,14 @@ import { CreateLinkModal } from "@/components/links/CreateLinkModal";
 import { LinkCreatedModal } from "@/components/links/LinkCreatedModal";
 import { QRCodeModal } from "@/components/links/QRCodeModal";
 import {
-  usePaymentLinks,
-  useCreatePaymentLink,
-  useDeactivatePaymentLink,
-} from "@/hooks/usePaymentLinks";
+  useLinks,
+  useCreateLink,
+  useDeactivateLink,
+} from "@/hooks/useLinks";
 import { useDashboardSocket } from "@/hooks/useDashboardSocket";
 import type { PaymentLink, CreatePaymentLinkInput } from "@useroutr/types";
+
+type StatusFilter = "all" | "active" | "expired" | "deactivated";
 
 // Simple debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -72,7 +74,9 @@ function LinkCardSkeleton() {
 export default function PaymentLinksPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(12);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createdLink, setCreatedLink] = useState<PaymentLink | null>(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -82,37 +86,42 @@ export default function PaymentLinksPage() {
   // Debounce search input (300ms)
   const debouncedSearch = useDebounce(search, 300);
 
-  const { data, isLoading, refetch } = usePaymentLinks({
+  const { data, isLoading, refetch } = useLinks({
+    page,
+    limit,
     status: statusFilter !== "all" ? statusFilter : undefined,
-    search: debouncedSearch || undefined,
   });
 
-  const createMutation = useCreatePaymentLink();
-  const deactivateMutation = useDeactivatePaymentLink();
+  const createMutation = useCreateLink();
+  const deactivateMutation = useDeactivateLink();
 
   // WebSocket for real-time payment notifications
   const { subscribe } = useDashboardSocket();
 
   useEffect(() => {
-    // Subscribe to payment link payment events
-    const unsubscribe = subscribe("payment-link.payment", (...args: unknown[]) => {
-      const payload = args[0] as { linkId: string; amount: number };
-      toast(`Payment received: $${payload.amount}`, "success");
+    // Refresh the link list when a real-time link payment event arrives.
+    const unsubscribe = subscribe("payment-link.payment", () => {
       refetch();
     });
 
     return () => unsubscribe();
-  }, [subscribe, toast, refetch]);
+  }, [subscribe, refetch]);
 
   const handleCreate = (data: CreatePaymentLinkInput) => {
     createMutation.mutate(data, {
-      onSuccess: (newLink) => {
+      onSuccess: async (newLink) => {
         setCreatedLink(newLink);
         setIsCreateModalOpen(false);
-        toast("Payment link created successfully!", "success");
+
+        try {
+          await navigator.clipboard.writeText(newLink.url);
+          toast(`Payment link created and copied: ${newLink.url}`, "success");
+        } catch {
+          toast(`Payment link created: ${newLink.url}`, "success");
+        }
       },
       onError: (error) => {
-        toast(`Failed to create link: ${error.message}`, "error");
+        toast(error.message, "error");
       },
     });
   };
@@ -130,7 +139,7 @@ export default function PaymentLinksPage() {
         setLinkToDeactivate(null);
       },
       onError: (error) => {
-        toast(`Failed to deactivate: ${error.message}`, "error");
+        toast(error.message, "error");
       },
     });
   };
@@ -140,7 +149,18 @@ export default function PaymentLinksPage() {
     setIsQRModalOpen(true);
   };
 
-  const links = data?.data ?? [];
+  const allLinks = data?.data ?? [];
+  const links = useMemo(() => {
+    const query = debouncedSearch.trim().toLowerCase();
+    if (!query) return allLinks;
+
+    return allLinks.filter((link) =>
+      (link.description ?? "").toLowerCase().includes(query),
+    );
+  }, [allLinks, debouncedSearch]);
+
+  const totalLinks = data?.meta.total ?? 0;
+  const totalPages = data?.meta.totalPages ?? 0;
   const hasLinks = links.length > 0;
 
   // Determine if filters are active
@@ -149,6 +169,13 @@ export default function PaymentLinksPage() {
   // Show empty state for "no links" vs "no results"
   const showNoResults = hasActiveFilters && !hasLinks;
   const showNoLinks = !hasActiveFilters && !hasLinks;
+
+  const statusChips: Array<{ value: StatusFilter; label: string }> = [
+    { value: "all", label: "All" },
+    { value: "active", label: "Active" },
+    { value: "expired", label: "Expired" },
+    { value: "deactivated", label: "Deactivated" },
+  ];
 
   return (
     <div className="space-y-8 dashboard-enter">
@@ -172,7 +199,7 @@ export default function PaymentLinksPage() {
       />
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative flex-1 max-w-sm">
           <MagnifyingGlass
             size={18}
@@ -186,17 +213,22 @@ export default function PaymentLinksPage() {
           />
         </div>
 
-        <Select
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          options={[
-            { value: "all", label: "All Statuses" },
-            { value: "active", label: "Active" },
-            { value: "expired", label: "Expired" },
-            { value: "deactivated", label: "Deactivated" },
-          ]}
-          className="w-full sm:w-auto"
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {statusChips.map((chip) => (
+            <Button
+              key={chip.value}
+              type="button"
+              size="sm"
+              variant={statusFilter === chip.value ? "primary" : "outline"}
+              onClick={() => {
+                setStatusFilter(chip.value);
+                setPage(1);
+              }}
+            >
+              {chip.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {/* Links Grid */}
@@ -246,6 +278,19 @@ export default function PaymentLinksPage() {
           }}
         />
       ) : null}
+
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalLinks}
+        pageSize={limit}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setLimit(size);
+          setPage(1);
+        }}
+        pageSizeOptions={[12, 24, 48]}
+      />
 
       {/* Create Link Modal */}
       <CreateLinkModal

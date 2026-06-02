@@ -62,8 +62,7 @@ export function QRCodeModal({ open, onOpenChange, url, linkName }: QRCodeModalPr
         }, "image/png");
       };
       img.src = svgUrl;
-    } catch (error) {
-      console.error("Failed to download QR code:", error);
+    } catch {
       setIsDownloading(false);
     }
   };
@@ -79,7 +78,7 @@ export function QRCodeModal({ open, onOpenChange, url, linkName }: QRCodeModalPr
         </DialogHeader>
 
         <div className="flex flex-col items-center justify-center py-4">
-          <div className="rounded-lg border border-[var(--border)] bg-white p-4 shadow-sm">
+          <div className="rounded-lg border border-[var(--border)] bg-card p-4 shadow-sm">
             <QRCodeSVG
               value={url}
               size={200}
