@@ -1,0 +1,3 @@
+Useroutr responsible disclosure PGP public key
+
+Please request the current PGP key fingerprint from security@useroutr.com.
