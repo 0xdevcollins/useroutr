@@ -62,8 +62,7 @@ export function QRCodeModal({ open, onOpenChange, url, linkName }: QRCodeModalPr
         }, "image/png");
       };
       img.src = svgUrl;
-    } catch (error) {
-      console.error("Failed to download QR code:", error);
+    } catch {
       setIsDownloading(false);
     }
   };
