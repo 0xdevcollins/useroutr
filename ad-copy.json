@@ -1,0 +1,295 @@
+typescript
+import { z } from 'zod';
+import logger from '../utils/logger';
+
+// ---------------------------------------------------------------------------
+// Types & Schema
+// ---------------------------------------------------------------------------
+
+/** Campaign configuration validated at runtime. */
+export interface CampaignConfig {
+  readonly campaign_name: string;
+  readonly objective: string;
+  readonly channels: Channels;
+  readonly dependencies: Dependencies;
+}
+
+export interface GoogleAd {
+  readonly headline1: string;
+  readonly headline2: string;
+  readonly description: string;
+  readonly cta: 'View Pricing' | 'See Pricing' | 'Get Started';
+  readonly final_url: string;
+}
+
+export interface LinkedInAd {
+  readonly headline: string;
+  readonly description: string;
+  readonly cta: 'Learn More' | 'View Pricing';
+  readonly url: string;
+}
+
+export interface TwitterTweet {
+  readonly tweet: string;
+  readonly cta: 'Start Building' | 'See Pricing';
+  readonly url: string;
+}
+
+export interface Channels {
+  readonly google_ads: readonly GoogleAd[];
+  readonly linkedin_ads: readonly LinkedInAd[];
+  readonly twitter: readonly TwitterTweet[];
+}
+
+export interface Dependencies {
+  readonly tools: readonly string[];
+  readonly content_sources: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
+// Zod Schema
+// ---------------------------------------------------------------------------
+
+const GoogleAdSchema = z.object({
+  headline1: z.string().min(1).max(30),
+  headline2: z.string().min(1).max(30),
+  description: z.string().min(1).max(90),
+  cta: z.enum(['View Pricing', 'See Pricing', 'Get Started']),
+  final_url: z.string().url().or(z.string().startsWith('/')),
+}).strict();
+
+const LinkedInAdSchema = z.object({
+  headline: z.string().min(1).max(70),
+  description: z.string().min(1).max(150),
+  cta: z.enum(['Learn More', 'View Pricing']),
+  url: z.string().url().or(z.string().startsWith('/')),
+}).strict();
+
+const TwitterTweetSchema = z.object({
+  tweet: z.string().min(1).max(280),
+  cta: z.enum(['Start Building', 'See Pricing']),
+  url: z.string().url().or(z.string().startsWith('/')),
+}).strict();
+
+const ChannelsSchema = z.object({
+  google_ads: z.array(GoogleAdSchema).min(1),
+  linkedin_ads: z.array(LinkedInAdSchema).min(1),
+  twitter: z.array(TwitterTweetSchema).min(1),
+}).strict();
+
+const DependenciesSchema = z.object({
+  tools: z.array(z.string()).min(1),
+  content_sources: z.array(z.string()).min(1),
+}).strict();
+
+const CampaignConfigSchema = z.object({
+  campaign_name: z.string().min(1).max(100),
+  objective: z.string().min(1).max(500),
+  channels: ChannelsSchema,
+  dependencies: DependenciesSchema,
+}).strict();
+
+// ---------------------------------------------------------------------------
+// Custom Error
+// ---------------------------------------------------------------------------
+
+/**
+ * Configuration validation error.
+ * Includes a timestamp to aid debugging.
+ */
+export class ConfigurationError extends Error {
+  /** Unix timestamp (ms) when the error was created. */
+  public readonly timestamp: number;
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ConfigurationError';
+    this.timestamp = Date.now();
+    Object.setPrototypeOf(this, ConfigurationError.prototype);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Validation Function
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses and validates raw campaign configuration data.
+ *
+ * @param data - Raw JSON-like object to validate.
+ * @returns A validated {@link CampaignConfig} object.
+ * @throws {ConfigurationError} If validation fails, with a detailed message.
+ */
+export function validateCampaignConfig(data: unknown): CampaignConfig {
+  const inputType = typeof data;
+  const inputSize = data instanceof Object ? Object.keys(data).length : `${inputType}`;
+  logger.info('Validating campaign configuration', { inputSize });
+
+  const result = CampaignConfigSchema.safeParse(data);
+  if (!result.success) {
+    const formattedErrors: ReadonlyArray<{ path: string; message: string }> =
+      result.error.errors.map((e) => ({
+        path: e.path.join('.'),
+        message: e.message,
+      }));
+    logger.error('Campaign configuration validation failed', {
+      errors: formattedErrors,
+      inputType,
+    });
+    throw new ConfigurationError(
+      `Campaign configuration validation failed:\n${formattedErrors
+        .map((e) => `  - ${e.path}: ${e.message}`)
+        .join('\n')}`
+    );
+  }
+
+  logger.info('Campaign configuration validated successfully', {
+    campaignName: result.data.campaign_name,
+  });
+  return result.data;
+}
+
+// ---------------------------------------------------------------------------
+// Default Campaign Configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * Default configuration for the "PlainPricing Launch – No Revenue Share" campaign.
+ * The object is declared with `as const` to preserve literal types and satisfies
+ * the schema shape for compile-time safety.
+ *
+ * @remarks
+ * The `dependencies.tools` and `dependencies.content_sources` are `readonly string[]`.
+ * Zod's `z.array(z.string())` accepts readonly arrays at runtime.
+ */
+const DEFAULT_CONFIG_RAW = {
+  campaign_name: 'PlainPricing Launch – No Revenue Share',
+  objective:
+    'Drive qualified traffic to the new /pricing page, reduce bounce rate from 404 link context, and convert visitors into signups with transparent pricing.',
+  channels: {
+    google_ads: [
+      {
+        headline1: 'Plain Pricing. No Revenue Share.',
+        headline2: '0.5% per transaction, drops to 0.35%',
+        description:
+          "What you'd hope a payment processor would do. One flat fee, no markup on card or crypto rails. Start building.",
+        cta: 'View Pricing' as const,
+        final_url: '/pricing',
+      },
+      {
+        headline1: 'Payment Processing Without Revenue Share',
+        headline2: 'Transparent fees from 0.5%',
+        description:
+          'Crypto, cards, bank transfers – one fee. No hidden costs. No minimums. See our simple pricing.',
+        cta: 'See Pricing' as const,
+        final_url: '/pricing',
+      },
+      {
+        headline1: '0.5% Per Transaction – No Markups',
+        headline2: 'Network costs pass through at cost',
+        description:
+          'The same fee on every rail. Card, bank, crypto, mobile money. Volume discounts above $50k. Start building.',
+        cta: 'Get Started' as const,
+        final_url: '/pricing',
+      },
+    ],
+    linkedin_ads: [
+      {
+        headline: 'Plain Pricing. No Revenue Share.',
+        description:
+          'One per-transaction fee, the same on every rail. Network costs pass through at cost — we never mark up the underlying chain or fiat rail. No setup fees, no monthly minimums, no hidden FX spreads. See why transparent payment processing matters.',
+        cta: 'Learn More' as const,
+        url: '/pricing',
+      },
+      {
+        headline: 'Payment Infrastructure – Plain & Transparent',
+        description:
+          'Starter plan at 0.5% per transaction, dropping to 0.35% above $50k monthly volume. All payment methods included. No revenue share. No markup on card, crypto, or bank rails. Explore our pricing.',
+        cta: 'View Pricing' as const,
+        url: '/pricing',
+      },
+    ],
+    twitter: [
+      {
+        tweet:
+          "Plain pricing. No revenue share. What you'd hope a payment processor would do.\n\n0.5% per transaction — drops to 0.35% above $50k/month. No markups on card, crypto, or bank rails.\n\nStart building today → /pricing",
+        cta: 'Start Building' as const,
+        url: '/pricing',
+      },
+      {
+        tweet:
+          "We don't do revenue share. We don't mark up network costs. We don't charge setup fees.\n\nPlain pricing: 0.5% per transaction, same on every rail.\n\nSee transparent pricing → /pricing",
+        cta: 'See Pricing' as const,
+        url: '/pricing',
+      },
+    ],
+  },
+  dependencies: {
+    tools: [
+      'Google Ads Editor',
+      'LinkedIn Campaign Manager',
+      'Twitter Ads',
+    ] as const,
+    content_sources: [
+      'Pricing page copy (H1: Plain pricing. No revenue share.)',
+      'Tier card: Starter at 0.5% per transaction',
+      'Add-on table: card, bank, crypto pass-through',
+      'Volume pricing strip: 0.35% above $50k, 0.30% above $500k',
+      "What we don't charge for: setup fees, monthly minimums, hidden FX spreads",
+    ] as const,
+  },
+} as const satisfies Omit<CampaignConfig, 'dependencies'> & {
+  dependencies: {
+    tools: readonly string[];
+    content_sources: readonly string[];
+  };
+};
+
+// Cache for validated default configuration
+let _defaultConfig: CampaignConfig | undefined;
+
+/**
+ * Returns a validated default campaign configuration.
+ * The config is validated once and cached for subsequent calls.
+ *
+ * @returns A {@link CampaignConfig} object guaranteed to pass schema validation.
+ * @throws {ConfigurationError} If the default config itself is invalid.
+ */
+export function getDefaultCampaignConfig(): CampaignConfig {
+  if (_defaultConfig) {
+    logger.debug('Returning cached default campaign configuration');
+    return _defaultConfig;
+  }
+
+  logger.debug('Validating default campaign configuration for the first time');
+  // The cast is necessary because 'as const' produces deeply nested literal types
+  // that differ from the mutable schema output. Schema validation ensures type safety.
+  const validated = validateCampaignConfig(DEFAULT_CONFIG_RAW as unknown as Record<string, unknown>);
+  _defaultConfig = validated;
+  return validated;
+}
+
+// ---------------------------------------------------------------------------
+// Eager Validation on Module Load
+// ---------------------------------------------------------------------------
+
+try {
+  getDefaultCampaignConfig();
+  logger.info('Default campaign configuration validated on module load');
+} catch (error: unknown) {
+  if (error instanceof ConfigurationError) {
+    logger.fatal('Default campaign configuration is invalid – check DEFAULT_CONFIG_RAW', {
+      error: error.message,
+      timestamp: error.timestamp,
+    });
+  } else {
+    logger.fatal('Unexpected error during default config validation', { error });
+  }
+  throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Re-export types for convenience
+// ---------------------------------------------------------------------------
+
+export type { GoogleAd, LinkedInAd, TwitterTweet, Channels, Dependencies };
