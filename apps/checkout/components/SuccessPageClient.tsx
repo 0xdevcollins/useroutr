@@ -33,7 +33,7 @@ export function SuccessPageClient({ params }: SuccessPageClientProps) {
     return (
       <div className="flex min-h-screen justify-center bg-muted/30 px-4 py-8 sm:px-8">
         <div className="w-full max-w-[460px] space-y-6">
-          <MerchantBranding />
+          <MerchantBranding merchantName="Merchant" />
           <div className="rounded-xl border border-border bg-card p-8 text-center shadow-sm">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
               <div className="h-8 w-8 animate-pulse rounded-full bg-muted-foreground/20" />

@@ -6,86 +6,108 @@ import {
   Link as LinkIcon,
   Send,
   Receipt,
-  BookOpen,
+  ArrowUpRight,
   ArrowRight,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface Action {
   icon: React.ReactNode;
   label: string;
   description: string;
   href: string;
+  external?: boolean;
 }
 
 const ACTIONS: Action[] = [
   {
-    icon: <LinkIcon className="h-4 w-4" />,
-    label: "New Link",
-    description: "Create a shareable payment link",
+    icon: <LinkIcon className="size-4" strokeWidth={1.5} />,
+    label: "New payment link",
+    description: "Shareable URL with a fixed or open amount",
     href: "/links",
   },
   {
-    icon: <Send className="h-4 w-4" />,
-    label: "Send Payout",
-    description: "Initiate a payout to a recipient",
+    icon: <Send className="size-4" strokeWidth={1.5} />,
+    label: "Send a payout",
+    description: "Single or bulk to bank, mobile, or wallet",
     href: "/payouts",
   },
   {
-    icon: <Receipt className="h-4 w-4" />,
-    label: "New Invoice",
-    description: "Draft and send a client invoice",
+    icon: <Receipt className="size-4" strokeWidth={1.5} />,
+    label: "Draft an invoice",
+    description: "Branded, with auto-reminders",
     href: "/invoices",
   },
   {
-    icon: <BookOpen className="h-4 w-4" />,
-    label: "View Docs",
-    description: "Browse developer documentation",
-    href: "https://docs.useroutr.io",
+    icon: <ArrowUpRight className="size-4" strokeWidth={1.5} />,
+    label: "Read the API",
+    description: "Docs · SDK · webhooks",
+    href: "https://docs.useroutr.com",
+    external: true,
   },
 ];
 
 export function QuickActions() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
+    <motion.aside
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut", delay: 0.25 }}
+      transition={{ duration: 0.5, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      className="surface flex h-full flex-col p-6"
     >
-      <Card className="h-full">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">
-            Quick Actions
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1">
-          {ACTIONS.map((action) => (
+      <span className="eyebrow">Quick actions</span>
+      <h3
+        className="mt-3 text-[20px] tracking-[-0.025em] text-foreground"
+        style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
+      >
+        What do you want to ship today?
+      </h3>
+
+      <ul className="mt-5 flex flex-1 flex-col">
+        {ACTIONS.map((action, i) => (
+          <motion.li
+            key={action.href}
+            initial={{ opacity: 0, x: -4 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{
+              duration: 0.4,
+              delay: 0.4 + i * 0.05,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="row-rule"
+          >
             <Link
-              key={action.href}
               href={action.href}
-              className="group flex items-center gap-3 rounded-lg p-3 transition-colors duration-150 hover:bg-accent"
+              {...(action.external
+                ? { target: "_blank", rel: "noreferrer" }
+                : {})}
+              className="group flex items-center gap-4 py-4"
             >
-              {/* Icon bubble */}
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors duration-150 group-hover:bg-primary group-hover:text-primary-foreground">
+              <span className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-card text-foreground transition-colors group-hover:border-accent group-hover:text-accent">
                 {action.icon}
-              </div>
-
-              {/* Text */}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium text-foreground transition-colors group-hover:text-accent">
                   {action.label}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
+                </span>
+                <span className="block truncate text-[12px] text-muted-foreground">
                   {action.description}
-                </p>
-              </div>
-
-              {/* Arrow */}
-              <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary" />
+                </span>
+              </span>
+              {action.external ? (
+                <ArrowUpRight
+                  className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground"
+                  strokeWidth={1.5}
+                />
+              ) : (
+                <ArrowRight
+                  className="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground"
+                  strokeWidth={1.5}
+                />
+              )}
             </Link>
-          ))}
-        </CardContent>
-      </Card>
-    </motion.div>
+          </motion.li>
+        ))}
+      </ul>
+    </motion.aside>
   );
 }

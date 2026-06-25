@@ -1,3 +1,8 @@
+/*
+ * Useroutr Dashboard — extends the shared design system tokens from
+ * @useroutr/ui. Anything app-specific (header height, surfaces, animations)
+ * lives below.
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@useroutr/ui/globals.css";
@@ -50,9 +55,9 @@
   --color-purple: var(--purple);
 
   /* ── Font families ── */
-  --font-display: "Inter", "Trebuchet MS", sans-serif;
-  --font-body: "Open Sans", sans-serif;
-  --font-mono: "IBM Plex Mono", "JetBrains Mono", Menlo, monospace;
+  --font-display: var(--font-hanken), "Trebuchet MS", sans-serif;
+  --font-body: var(--font-hanken), sans-serif;
+  --font-mono: var(--font-jet-mono), "JetBrains Mono", Menlo, monospace;
 
   /* ── Radius ── */
   --radius-sm: var(--radius-sm);
@@ -101,21 +106,6 @@
   --color-status-purple-text: var(--status-purple-text);
   --color-status-amber-bg: var(--status-amber-bg);
   --color-status-amber-text: var(--status-amber-text);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-body);
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-display);
-  }
 }
 
 :root {
@@ -215,59 +205,73 @@
   --sidebar-ring: var(--blue2);
 }
 
-/* ── Modern card surface ── */
+@layer base {
+  body {
+    font-feature-settings: "ss01", "ss02";
+  }
+}
+
+/* ── Editorial card surface — used across dashboard widgets ──────────── */
 .surface {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-
 .surface:hover {
-  box-shadow: var(--shadow-md);
   border-color: var(--rule2);
+  box-shadow: var(--shadow-sm);
 }
 
-/* ── Glow accent for primary elements ── */
-.glow-primary {
-  box-shadow: 0 0 20px oklch(0.55 0.18 255 / 15%), var(--shadow-sm);
+/* ── Numeric / tabular numerals — for tables, balances, code ─────────── */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
-.glow-primary:hover {
-  box-shadow: 0 0 32px oklch(0.55 0.18 255 / 25%), var(--shadow-md);
+/* ── Hairline divider for tables / lists ─────────────────────────────── */
+.divide-hairline > * + * {
+  border-top: 1px solid var(--rule);
 }
 
-.light .glow-primary {
-  box-shadow: 0 0 24px oklch(0.55 0.18 255 / 10%), var(--shadow-sm);
+/* ── Fade-in for route content ───────────────────────────────────────── */
+.dashboard-enter {
+  animation: dashboard-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes dashboard-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.light .glow-primary:hover {
-  box-shadow: 0 0 36px oklch(0.55 0.18 255 / 18%), var(--shadow-md);
-}
-
-/* ── Gradient border accent ── */
-.gradient-border {
+/* ── Decorative accent rail ───────────────────────────────────────────── */
+.accent-rail {
   position: relative;
-  border: none;
-  background: var(--card);
-  border-radius: var(--radius-xl);
 }
-
-.gradient-border::before {
+.accent-rail::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, var(--blue) 0%, var(--teal) 50%, var(--purple) 100%);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0.4;
-  transition: opacity 0.3s ease;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 2px;
 }
 
-.gradient-border:hover::before {
-  opacity: 0.7;
+/* ── Gradient ring for premium / featured elements ───────────────────── */
+.gradient-ring {
+  position: relative;
+}
+.gradient-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--accent), var(--teal));
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }

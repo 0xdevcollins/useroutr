@@ -27,7 +27,8 @@ import { PaymentsService } from '../payments/payments.service.js';
 
 type RawBodyRequest = Request & { rawBody?: Buffer };
 
-@Controller('v1/webhooks')
+// Global `/v1` prefix is set in main.ts — controller routes are relative.
+@Controller('webhooks')
 export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 

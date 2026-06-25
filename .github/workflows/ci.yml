@@ -180,13 +180,13 @@ jobs:
       - name: Build Dashboard
         working-directory: apps/dashboard
         env:
-          NEXT_PUBLIC_API_URL: https://api.useroutr.io
+          NEXT_PUBLIC_API_URL: https://api.useroutr.com
         run: npm run build
 
       - name: Build Checkout
         working-directory: apps/checkout
         env:
-          NEXT_PUBLIC_API_URL: https://api.useroutr.io
+          NEXT_PUBLIC_API_URL: https://api.useroutr.com
         run: npm run build
 
       - name: Build WWW

@@ -299,7 +299,7 @@ Use tv\_live\_ prefixed keys for production and tv\_test\_ prefixed keys for san
 
 ## **5.2 Base URL**
 
-<https://api.useroutr.io/v1>
+<https://api.useroutr.com/v1>
 
 ## **5.3 Core Endpoints**
 
@@ -357,7 +357,7 @@ POST /v1/payments
 
   "status": "pending",
 
-  "checkout\_url": "<https://checkout.useroutr.io/pay/abc123>",
+  "checkout\_url": "<https://checkout.useroutr.com/pay/abc123>",
 
   "amount": 10000,
 
@@ -413,7 +413,7 @@ All errors follow a consistent format with an HTTP status code, error code, and 
 
     "message": "Unable to find a conversion path for the requested amount.",
 
-    "docs": "https://docs.useroutr.io/errors/insufficient\_liquidity"
+    "docs": "https://docs.useroutr.com/errors/insufficient\_liquidity"
 
   }
 
@@ -643,7 +643,7 @@ POST /v1/refunds
 
 # **9\. Dashboard**
 
-The Useroutr Dashboard (dashboard.useroutr.io) is the no-code interface for managing your Useroutr account. It provides full visibility into transactions, tools to create payment links and invoices, and settings for API keys, webhooks, and team members.
+The Useroutr Dashboard (dashboard.useroutr.com) is the no-code interface for managing your Useroutr account. It provides full visibility into transactions, tools to create payment links and invoices, and settings for API keys, webhooks, and team members.
 
 ## **9.1 Dashboard Sections**
 
@@ -727,4 +727,4 @@ Useroutr's hosted checkout (Useroutr Gateway) is PCI DSS Level 1 compliant. Card
 | Wormhole | A cross-chain messaging protocol enabling asset transfers between Stellar and other blockchains |
 | XLM | Stellar's native currency (Lumens), used for transaction fees and minimum account reserves |
 
-© 2026 Useroutr. All rights reserved. docs.useroutr.io
+© 2026 Useroutr. All rights reserved. docs.useroutr.com

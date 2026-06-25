@@ -60,7 +60,7 @@ export function ConfirmPageClient({ params }: ConfirmPageClientProps) {
     return (
       <div className="flex min-h-screen justify-center bg-muted/30 px-4 py-8 sm:px-8">
         <div className="w-full max-w-[460px] space-y-6">
-          <MerchantBranding />
+          <MerchantBranding merchantName="Merchant" />
           <div className="rounded-xl border border-border bg-card p-8 text-center shadow-sm">
             <ProcessingAnimation message="Loading payment details..." />
           </div>

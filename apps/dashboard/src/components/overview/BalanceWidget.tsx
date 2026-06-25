@@ -1,20 +1,16 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Wallet } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCountUp } from "@/hooks/useCountUp";
 
 export function BalanceWidgetSkeleton() {
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-6">
-        <Skeleton className="mb-3 h-4 w-32" />
-        <Skeleton className="mb-2 h-9 w-40" />
-        <Skeleton className="h-5 w-16 rounded-full" />
-      </CardContent>
-    </Card>
+    <div className="surface flex flex-col gap-3 p-6">
+      <Skeleton className="h-3 w-32" />
+      <Skeleton className="h-9 w-40" />
+      <Skeleton className="h-3 w-full" />
+    </div>
   );
 }
 
@@ -22,47 +18,76 @@ interface BalanceWidgetProps {
   amount: number;
   asset: string;
   index?: number;
+  /** Percent of cap used — drives the bar gauge. Defaults to 47 */
+  pct?: number;
 }
 
 export function BalanceWidget({
   amount,
   asset,
   index = 3,
+  pct = 47,
 }: BalanceWidgetProps) {
   const animated = useCountUp(amount, 600);
+  const totalBars = 24;
+  const filled = Math.round((pct / 100) * totalBars);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
+    <motion.article
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: "easeOut", delay: index * 0.07 }}
+      transition={{
+        duration: 0.5,
+        ease: [0.22, 1, 0.36, 1],
+        delay: index * 0.06,
+      }}
+      className="surface relative flex flex-col gap-3 overflow-hidden p-6"
     >
-      <Card className="h-full overflow-hidden border-primary/20 bg-linear-to-br from-primary/5 to-transparent transition-shadow hover:shadow-md">
-        <CardContent className="p-6">
-          {/* Label row */}
-          <div className="mb-2 flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-              <Wallet className="h-3.5 w-3.5 text-primary" />
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Settlement Balance
-            </p>
-          </div>
+      {/* Decorative accent rail */}
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 h-full w-[2px] bg-accent"
+      />
 
-          {/* Amount */}
-          <p className="text-3xl font-bold leading-none tracking-tight text-foreground">
-            {animated.toLocaleString()}
-          </p>
+      <div className="flex items-baseline justify-between">
+        <span className="eyebrow">Settlement balance</span>
+        <span
+          className="text-[11px] text-muted-foreground"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          {asset} · Stellar
+        </span>
+      </div>
 
-          {/* Asset badge */}
-          <div className="mt-3 flex items-center gap-2">
-            <span className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-primary-foreground">
-              {asset}
-            </span>
-            <span className="text-xs text-muted-foreground">via Stellar</span>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+      <div
+        className="text-[36px] leading-none tracking-[-0.035em] text-foreground tabular md:text-[40px]"
+        style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
+      >
+        ${animated.toLocaleString()}
+      </div>
+
+      {/* Bar gauge — same vocabulary as the marketing hero balance card */}
+      <div className="mt-1 flex items-center gap-3">
+        <div className="flex flex-1 items-center gap-[3px]">
+          {Array.from({ length: totalBars }).map((_, i) => (
+            <motion.span
+              key={i}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={{ duration: 0.4, delay: 0.4 + i * 0.022 }}
+              className={`h-3 w-0.5 origin-bottom rounded-full ${
+                i < filled ? "bg-accent" : "bg-border"
+              }`}
+            />
+          ))}
+        </div>
+        <span
+          className="shrink-0 text-[11px] text-muted-foreground"
+          style={{ fontFamily: "var(--font-mono)" }}
+        >
+          {pct}%
+        </span>
+      </div>
+    </motion.article>
   );
 }

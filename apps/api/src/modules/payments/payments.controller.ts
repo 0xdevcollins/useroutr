@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Get,
@@ -26,7 +27,8 @@ interface AuthenticatedRequest extends Request {
   user?: { id: string; merchantId?: string };
 }
 
-@Controller('v1')
+// Global `/v1` prefix is set in main.ts — controller routes are relative.
+@Controller()
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
 
@@ -145,5 +147,69 @@ export class CheckoutPaymentsController {
   @Get('checkout/:paymentId/quote')
   getCheckoutQuote(@Param('paymentId') paymentId: string) {
     return this.paymentsService.getCheckoutQuote(paymentId);
+  }
+
+  /**
+   * Create a payment from a public payment link. Called by the hosted
+   * checkout app when a customer clicks "Pay" on `/l/{shortCode}` — there
+   * is no merchant credential; the shortCode is the only authorizer.
+   *
+   * Body is `{ amount?: number }` — required only for open-amount links
+   * (where `link.amount` is null). Ignored for fixed-amount links.
+   *
+   * Response: `{ id }` — the new payment ID. The checkout app navigates
+   * the customer to `/{id}` to pick a payment method.
+   */
+  @Post('checkout/from-link/:shortCode')
+  createFromLink(
+    @Param('shortCode') shortCode: string,
+    @Body() body: { amount?: number },
+  ) {
+    return this.paymentsService.createFromLink(shortCode, {
+      amount: body?.amount,
+    });
+  }
+
+  // ── Customer crypto pay flow (CCTP V2 EVM → Stellar) ───────────────────
+  //
+  // Three-step flow, all public, paymentId is the credential. See
+  // `apps/api/docs/architecture/crypto-pay-flow.md` for the state
+  // machine + rationale.
+  //
+  //   POST   /checkout/:paymentId/select-crypto    → lock quote + return wallet payload
+  //   POST   /checkout/:paymentId/burn-submitted   → record sourceTxHash, transition to SOURCE_LOCKED
+  //   GET    /checkout/:paymentId/crypto-status    → poll-able status surface
+  //
+  // The worker that drives SOURCE_LOCKED → PROCESSING → COMPLETED lands
+  // in PR 7.8b. Until then, payments stay in SOURCE_LOCKED after
+  // burn-submitted — the status endpoint reflects that.
+
+  @Post('checkout/:paymentId/select-crypto')
+  selectCrypto(
+    @Param('paymentId') paymentId: string,
+    @Body() body: { sourceChain: string },
+  ) {
+    if (!body?.sourceChain) {
+      throw new BadRequestException('sourceChain is required');
+    }
+    return this.paymentsService.selectCrypto(paymentId, body.sourceChain);
+  }
+
+  @Post('checkout/:paymentId/burn-submitted')
+  burnSubmitted(
+    @Param('paymentId') paymentId: string,
+    @Body() body: { sourceTxHash: string },
+  ) {
+    if (!body?.sourceTxHash || !/^0x[0-9a-fA-F]{64}$/.test(body.sourceTxHash)) {
+      throw new BadRequestException(
+        'sourceTxHash must be a 0x-prefixed 32-byte hex string',
+      );
+    }
+    return this.paymentsService.submitBurn(paymentId, body.sourceTxHash);
+  }
+
+  @Get('checkout/:paymentId/crypto-status')
+  cryptoStatus(@Param('paymentId') paymentId: string) {
+    return this.paymentsService.getCryptoStatus(paymentId);
   }
 }

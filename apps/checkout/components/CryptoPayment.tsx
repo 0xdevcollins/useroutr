@@ -1,132 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useAccount,
   useSwitchChain,
-  useBalance,
-  useWriteContract,
+  useChainId,
+  useSendTransaction,
+  useWaitForTransactionReceipt,
 } from "wagmi";
-import { formatUnits, parseUnits } from "viem";
-import { Wallet, ArrowRight, Coins, Clock, AlertCircle } from "lucide-react";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { useQuote } from "@/hooks/useQuote";
-import { api } from "@/lib/api";
+import {
+  ArrowRight,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Wallet,
+  ExternalLink,
+} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import {
+  useCryptoSelect,
+  type CryptoSelectResponse,
+} from "@/hooks/useCryptoSelect";
+import { useCryptoStatus } from "@/hooks/useCryptoStatus";
 
-interface Chain {
-  id: number;
-  name: string;
-  icon: string;
-}
+/**
+ * Crypto payment via Circle CCTP V2 (EVM → Stellar). The customer:
+ *
+ *   1. Connects a wallet (RainbowKit)
+ *   2. Picks one of the 5 enabled CCTP V2 EVM chains
+ *   3. Locks a quote — API returns wallet-signable approve + burn calldata
+ *   4. Signs approve(USDC, TokenMessengerV2, amount)
+ *   5. Signs depositForBurnWithHook(...) — calldata pre-encoded server-side
+ *   6. Notifies API → backend enqueues attestation polling worker
+ *   7. Page polls `/crypto-status` every 3s until COMPLETED
+ *
+ * The 30s quote countdown is enforced by the API on submit, not the
+ * client — the page is allowed to be sloppy about timing because the
+ * worst case is a "quote expired" error on burn-submitted with a
+ * re-quote retry.
+ */
 
-interface Token {
-  symbol: string;
-  name: string;
-  decimals: number;
-  address?: string;
-}
+const SUPPORTED_CHAINS = [
+  { id: "ethereum", label: "Ethereum" },
+  { id: "base", label: "Base" },
+  { id: "arbitrum", label: "Arbitrum" },
+  { id: "optimism", label: "Optimism" },
+  { id: "avalanche", label: "Avalanche" },
+] as const;
 
-const SUPPORTED_CHAINS: Chain[] = [
-  { id: 1, name: "Ethereum", icon: "ETH" },
-  { id: 8453, name: "Base", icon: "BASE" },
-  { id: 56, name: "BNB Chain", icon: "BNB" },
-  { id: 137, name: "Polygon", icon: "POLYGON" },
-  { id: 42161, name: "Arbitrum", icon: "ARB" },
-  { id: 43114, name: "Avalanche", icon: "AVAX" },
-];
-
-const TOKENS_BY_CHAIN: Record<number, Token[]> = {
-  1: [
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    },
-    {
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 6,
-      address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-    },
-    { symbol: "ETH", name: "Ethereum", decimals: 18 },
-  ],
-  8453: [
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    },
-    {
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 6,
-      address: "0x509E2F92d896c8496208F272242754731b3930b6",
-    },
-    { symbol: "ETH", name: "Ethereum", decimals: 18 },
-  ],
-  56: [
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 18,
-      address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
-    },
-    {
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 18,
-      address: "0x55d398326f99059fF775485246999027B3197955",
-    },
-    { symbol: "BNB", name: "BNB", decimals: 18 },
-  ],
-  137: [
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      address: "0x3c499c544f40c594894fd951efce465d98209834",
-    },
-    {
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 6,
-      address: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-    },
-    { symbol: "ETH", name: "Ethereum", decimals: 18 },
-  ],
-  42161: [
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      address: "0xaf88d065e77d8c9a2bb7440e90daecaa9e378f99",
-    },
-    {
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 6,
-      address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-    },
-    { symbol: "ETH", name: "Ethereum", decimals: 18 },
-  ],
-  43114: [
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      address: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
-    },
-    {
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 6,
-      address: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
-    },
-    { symbol: "AVAX", name: "Avalanche", decimals: 18 },
-  ],
-};
+type SupportedChainId = (typeof SUPPORTED_CHAINS)[number]["id"];
 
 interface CryptoPaymentProps {
   paymentId: string;
@@ -139,323 +62,459 @@ export function CryptoPayment({
   merchantAmount,
   merchantCurrency,
 }: CryptoPaymentProps) {
-  const [selectedChain, setSelectedChain] = useState<Chain>(
-    SUPPORTED_CHAINS[0],
-  );
-  const [selectedToken, setSelectedToken] = useState<Token>(
-    TOKENS_BY_CHAIN[SUPPORTED_CHAINS[0].id][0],
-  );
-  const [isApproving, setIsApproving] = useState(false);
-  const [isLocking, setIsLocking] = useState(false);
-  const [lockTxHash, setLockTxHash] = useState<string | null>(null);
+  const [selectedChain, setSelectedChain] = useState<SupportedChainId>("base");
+  const [quote, setQuote] = useState<CryptoSelectResponse | null>(null);
+  const [step, setStep] = useState<
+    "pick" | "approving" | "burning" | "submitted" | "done" | "failed"
+  >("pick");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [approveTxHash, setApproveTxHash] = useState<`0x${string}` | null>(null);
+  const [burnTxHash, setBurnTxHash] = useState<`0x${string}` | null>(null);
 
-  const { address, chain, isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
+  const currentChainId = useChainId();
   const { openConnectModal } = useConnectModal();
-  const { switchChain } = useSwitchChain();
-  const { writeContractAsync } = useWriteContract();
-  const { data: balanceData } = useBalance({
-    address,
-    token: selectedToken?.address as `0x${string}`,
-    query: {
-      enabled: !!address && !!selectedToken,
-    },
+  const { switchChainAsync } = useSwitchChain();
+  const { sendTransactionAsync } = useSendTransaction();
+
+  const select = useCryptoSelect(paymentId);
+  const status = useCryptoStatus(paymentId, step === "submitted");
+
+  // Wait for the approve tx receipt before triggering the burn — wagmi
+  // hook does the polling for us against the connected chain's RPC.
+  const approveReceipt = useWaitForTransactionReceipt({
+    hash: approveTxHash ?? undefined,
+    query: { enabled: !!approveTxHash },
   });
 
-  const {
-    data: quote,
-    isLoading: quoteLoading,
-    error: quoteApiError,
-  } = useQuote(paymentId, selectedToken?.symbol);
+  /* ── Step transitions driven by status polling ────────────────────── */
 
-  const handleSelectChain = (newChain: Chain) => {
-    setSelectedChain(newChain);
-    const tokens = TOKENS_BY_CHAIN[newChain.id];
-    // Keep current token if available on the new chain, otherwise pick the first
-    if (!tokens.find((t) => t.symbol === selectedToken.symbol)) {
-      setSelectedToken(tokens[0]);
-    }
-  };
-
-  const handleConnectWallet = () => {
-    if (!isConnected) {
-      openConnectModal?.();
-    }
-  };
-
-  const handleSwitchChain = async () => {
-    if (selectedChain && chain?.id !== selectedChain.id) {
-      await switchChain({ chainId: selectedChain.id });
-    }
-  };
-
-  const handleApproveAndLock = async () => {
-    if (!selectedChain || !selectedToken || !quote || !address) return;
-
-    try {
-      setIsApproving(true);
-      const amount = parseUnits(
-        quote.fromAmount.toString(),
-        selectedToken.decimals,
+  useEffect(() => {
+    if (!status.data) return;
+    if (status.data.status === "COMPLETED") {
+      setStep("done");
+    } else if (status.data.status === "FAILED") {
+      setStep("failed");
+      setErrorMsg(
+        status.data.error ?? "Payment failed during cross-chain settlement.",
       );
-      const htlcAddress =
-        "0x0000000000000000000000000000000000000000" as `0x${string}`; // TODO: should come from API
-      const receiver =
-        "0x0000000000000000000000000000000000000000" as `0x${string}`; // TODO: should come from API
-      const hashlock =
-        "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`; // TODO: should come from API
-      const timelock = BigInt(Math.floor(Date.now() / 1000) + 86400);
+    }
+  }, [status.data]);
 
-      // Step 1: Approve token transfer (if not native token)
-      if (selectedToken.address) {
-        const approveTxHash = await writeContractAsync({
-          address: selectedToken.address as `0x${string}`,
-          abi: [
-            {
-              name: "approve",
-              type: "function",
-              stateMutability: "nonpayable",
-              inputs: [
-                { name: "spender", type: "address" },
-                { name: "amount", type: "uint256" },
-              ],
-              outputs: [{ name: "", type: "bool" }],
-            },
-          ] as const,
-          functionName: "approve",
-          args: [htlcAddress, amount],
-        });
+  /* ── Actions ──────────────────────────────────────────────────────── */
 
-        // TODO: use useWaitForTransactionReceipt for proper receipt waiting
-        console.log("Approve tx:", approveTxHash);
+  const handleLockQuote = async () => {
+    setErrorMsg(null);
+    try {
+      const result = await select.mutateAsync({ sourceChain: selectedChain });
+      setQuote(result);
+      // Switch wallet to the chain the quote targets — saves a manual click
+      // in MetaMask. The user can decline; we just won't auto-trigger sign.
+      if (currentChainId !== result.wallet.chainId) {
+        await switchChainAsync({ chainId: result.wallet.chainId });
       }
-
-      // Step 2: Lock funds in HTLC
-      setIsApproving(false);
-      setIsLocking(true);
-
-      const lockTxHash = await writeContractAsync({
-        address: htlcAddress,
-        abi: [
-          {
-            name: "lock",
-            type: "function",
-            stateMutability: "payable",
-            inputs: [
-              { name: "receiver", type: "address" },
-              { name: "token", type: "address" },
-              { name: "amount", type: "uint256" },
-              { name: "hashlock", type: "bytes32" },
-              { name: "timelock", type: "uint256" },
-            ],
-            outputs: [{ name: "lockId", type: "bytes32" }],
-          },
-        ] as const,
-        functionName: "lock",
-        args: [
-          receiver,
-          (selectedToken.address ||
-            "0x0000000000000000000000000000000000000000") as `0x${string}`,
-          amount,
-          hashlock,
-          timelock,
-        ],
-        value: selectedToken.address ? undefined : amount,
-      });
-
-      setLockTxHash(lockTxHash);
-      setIsLocking(false);
-
-      // Report lock to API
-      await api.post(`/payments/${paymentId}/source-lock`, {
-        sourceTxHash: lockTxHash,
-        sourceLockId: lockTxHash,
-        sourceAddress: address,
-      });
-
-      console.log("Lock transaction successful:", lockTxHash);
-    } catch (error) {
-      console.error("Lock transaction failed:", error);
-      setIsApproving(false);
-      setIsLocking(false);
+    } catch (err) {
+      setErrorMsg(extractMessage(err));
     }
   };
 
-  const hasSufficientBalance =
-    balanceData && quote
-      ? parseFloat(formatUnits(balanceData.value, selectedToken!.decimals)) >=
-        parseFloat(quote.fromAmount)
-      : false;
+  const handleApproveAndBurn = async () => {
+    if (!quote) return;
+    setErrorMsg(null);
 
-  const isWrongNetwork = isConnected && chain?.id !== selectedChain?.id;
+    // Defensive: make sure the wallet is on the right chain. switchChainAsync
+    // is idempotent on no-op so a re-call is cheap.
+    if (currentChainId !== quote.wallet.chainId) {
+      try {
+        await switchChainAsync({ chainId: quote.wallet.chainId });
+      } catch (err) {
+        setErrorMsg(`Please switch your wallet to chainId ${quote.wallet.chainId}`);
+        return;
+      }
+    }
+
+    // Step 1: approve
+    setStep("approving");
+    let approveHash: `0x${string}`;
+    try {
+      approveHash = await sendTransactionAsync({
+        to: quote.wallet.approve.to as `0x${string}`,
+        data: quote.wallet.approve.data as `0x${string}`,
+        value: BigInt(0),
+      });
+      setApproveTxHash(approveHash);
+    } catch (err) {
+      setStep("pick");
+      setErrorMsg(extractMessage(err));
+      return;
+    }
+
+    // Wait for approve receipt — wagmi hook handles this via approveReceipt
+    // and `useEffect` chain below. To keep the action flow linear here,
+    // poll inline with a small loop instead. Cast through `unknown` because
+    // wagmi's refetch signature is too narrow for a generic helper.
+    try {
+      await pollForReceipt(
+        approveReceipt.refetch as unknown as PollableRefetch,
+      );
+    } catch (err) {
+      setStep("pick");
+      setErrorMsg(`Approve transaction failed: ${extractMessage(err)}`);
+      return;
+    }
+
+    // Step 2: burn
+    setStep("burning");
+    let burnHash: `0x${string}`;
+    try {
+      burnHash = await sendTransactionAsync({
+        to: quote.wallet.burn.to as `0x${string}`,
+        data: quote.wallet.burn.data as `0x${string}`,
+        value: BigInt(0),
+      });
+      setBurnTxHash(burnHash);
+    } catch (err) {
+      setStep("pick");
+      setErrorMsg(extractMessage(err));
+      return;
+    }
+
+    // Step 3: notify backend, kick off attestation worker, start polling
+    try {
+      await api.post(`/checkout/${paymentId}/burn-submitted`, {
+        sourceTxHash: burnHash,
+      });
+      setStep("submitted");
+    } catch (err) {
+      setStep("failed");
+      setErrorMsg(
+        `Burn submitted on-chain but the API rejected the notification. Reload to refresh status. (${extractMessage(err)})`,
+      );
+    }
+  };
+
+  /* ── Render ───────────────────────────────────────────────────────── */
+
+  if (step === "done") {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center shadow-sm">
+        <CheckCircle
+          size={48}
+          className="mx-auto text-green-500"
+          strokeWidth={1.5}
+        />
+        <h2 className="mt-4 font-display text-lg font-semibold text-foreground">
+          Payment complete
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          USDC delivered on Stellar.
+        </p>
+        {status.data?.destExplorerUrl && (
+          <a
+            href={status.data.destExplorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          >
+            View settlement on Stellar
+            <ExternalLink size={14} />
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  if (step === "failed") {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
+        <AlertCircle
+          size={40}
+          className="mx-auto text-destructive"
+          strokeWidth={1.5}
+        />
+        <h2 className="mt-3 font-display text-base font-semibold text-foreground">
+          Payment failed
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {errorMsg ?? "Something went wrong during cross-chain settlement."}
+        </p>
+        <button
+          onClick={() => {
+            setStep("pick");
+            setQuote(null);
+            setApproveTxHash(null);
+            setBurnTxHash(null);
+            setErrorMsg(null);
+          }}
+          className="mt-4 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (step === "submitted" || step === "burning" || step === "approving") {
+    return <CryptoProgress step={step} status={status.data?.status} sourceExplorerUrl={status.data?.sourceExplorerUrl ?? null} burnTxHash={burnTxHash} />;
+  }
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
       <h2 className="font-display text-base font-semibold text-foreground">
         Pay with crypto
       </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Pay in USDC on the chain of your choice. Settles on Stellar in 8–20
+        seconds via Circle&apos;s CCTP V2.
+      </p>
 
-      <div className="mt-4 space-y-4">
-        {/* Chain Selection */}
-        <div>
-          <p className="text-sm font-medium text-foreground mb-2">
-            Select network
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {SUPPORTED_CHAINS.map((chain) => (
-              <button
-                key={chain.id}
-                onClick={() => handleSelectChain(chain)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  selectedChain?.id === chain.id
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border border bg-transparent text-foreground hover:border-primary/40 hover:bg-primary/5"
-                }`}
-              >
-                {chain.icon}
-              </button>
-            ))}
-          </div>
+      {/* Chain picker */}
+      <div className="mt-4">
+        <p className="mb-2 text-sm font-medium text-foreground">
+          Send USDC from
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {SUPPORTED_CHAINS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => {
+                setSelectedChain(c.id);
+                setQuote(null); // invalidate stale quote on chain change
+              }}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                selectedChain === c.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-transparent text-foreground hover:border-primary/40 hover:bg-primary/5"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
+      </div>
 
-        {/* Token Selection */}
-        <div>
-          <p className="text-sm font-medium text-foreground mb-2">
-            Select token
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {selectedChain &&
-              TOKENS_BY_CHAIN[selectedChain.id]?.map((token) => (
-                <button
-                  key={token.symbol}
-                  onClick={() => setSelectedToken(token)}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    selectedToken?.symbol === token.symbol
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-border border bg-transparent text-foreground hover:border-primary/40 hover:bg-primary/5"
-                  }`}
-                >
-                  {token.symbol}
-                </button>
-              ))}
-          </div>
-        </div>
-
-        {/* Quote Display */}
-        {quoteLoading && (
-          <div className="rounded-lg border border-border bg-muted/50 p-4 text-center">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Fetching quote...
-            </p>
-          </div>
-        )}
-        {quote && !quoteLoading && (
-          <div className="rounded-lg border border-border bg-muted/50 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground">You pay</span>
-              <span className="text-xs text-muted-foreground">Rate</span>
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-mono text-lg font-semibold">
-                {quote.fromAmount} {selectedToken?.symbol}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                1 {selectedToken?.symbol} = {quote.rate} {merchantCurrency}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                Fee: {quote.fee} {merchantCurrency}
-              </span>
-              <span>
-                Merchant gets: {merchantAmount} {merchantCurrency}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Error Display */}
-        {quoteApiError && (
-          <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3">
-            <AlertCircle size={16} className="text-destructive" />
-            <span className="text-sm text-destructive">
-              Failed to get quote. Please try again.
+      {/* Quote display */}
+      {quote && (
+        <div className="mt-4 rounded-lg border border-border bg-muted/40 p-4 font-mono text-sm">
+          <div className="flex items-baseline justify-between">
+            <span className="text-muted-foreground">You send</span>
+            <span className="font-semibold text-foreground">
+              {quote.quote.fromAmount} USDC
             </span>
           </div>
+          <div className="mt-1 flex items-baseline justify-between text-xs">
+            <span className="text-muted-foreground">Network fee</span>
+            <span className="text-muted-foreground">
+              {quote.quote.fee} {quote.quote.toAsset} ({quote.quote.feeBps / 100}%)
+            </span>
+          </div>
+          <div className="mt-2 border-t border-border pt-2">
+            <div className="flex items-baseline justify-between">
+              <span className="text-muted-foreground">Merchant gets</span>
+              <span className="font-semibold text-foreground">
+                {merchantAmount.toFixed(2)} {merchantCurrency}
+              </span>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Quote locked for {quote.quote.expiresInSeconds}s.
+          </p>
+        </div>
+      )}
+
+      {/* Error */}
+      {errorMsg && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          <AlertCircle
+            size={16}
+            className="mt-0.5 shrink-0 text-destructive"
+          />
+          <span className="text-destructive">{errorMsg}</span>
+        </div>
+      )}
+
+      {/* CTA */}
+      <div className="mt-5 space-y-2">
+        {!isConnected ? (
+          <button
+            type="button"
+            onClick={() => openConnectModal?.()}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:brightness-110"
+          >
+            <Wallet size={18} />
+            Connect wallet
+          </button>
+        ) : !quote ? (
+          <button
+            type="button"
+            disabled={select.isPending}
+            onClick={handleLockQuote}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:brightness-110 disabled:opacity-50"
+          >
+            {select.isPending ? (
+              <>
+                <Clock size={18} className="animate-spin" />
+                Locking quote…
+              </>
+            ) : (
+              <>
+                <ArrowRight size={18} />
+                Lock quote
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleApproveAndBurn}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:brightness-110"
+          >
+            <ArrowRight size={18} />
+            Approve &amp; Pay {quote.quote.fromAmount} USDC
+          </button>
         )}
 
-        {/* Wallet Status */}
-        <div className="space-y-2">
-          {!isConnected ? (
-            <button
-              onClick={handleConnectWallet}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:brightness-110"
-            >
-              <Wallet size={18} />
-              Connect wallet
-            </button>
-          ) : isWrongNetwork ? (
-            <button
-              onClick={handleSwitchChain}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-amber-600"
-            >
-              <AlertCircle size={18} />
-              Switch to {selectedChain?.name}
-            </button>
-          ) : !hasSufficientBalance ? (
-            <div className="flex w-full items-center justify-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm font-medium text-destructive">
-              <AlertCircle size={18} />
-              Insufficient balance
-            </div>
-          ) : (
-            <button
-              onClick={handleApproveAndLock}
-              disabled={isApproving || isLocking || !quote}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isApproving ? (
-                <>
-                  <Coins size={18} className="animate-spin" />
-                  Approving...
-                </>
-              ) : isLocking ? (
-                <>
-                  <Clock size={18} className="animate-spin" />
-                  Locking funds...
-                </>
-              ) : (
-                <>
-                  <ArrowRight size={18} />
-                  Approve & Pay
-                </>
-              )}
-            </button>
-          )}
-
-          {isConnected && (
-            <div className="text-center text-xs text-muted-foreground">
-              Connected: {address?.slice(0, 6)}...{address?.slice(-4)}
-            </div>
-          )}
-        </div>
-
-        {/* Transaction Status */}
-        {lockTxHash && (
-          <div className="flex items-center justify-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3">
-            <span className="text-sm text-green-700">
-              Transaction submitted!
-            </span>
-            <a
-              href={`https://etherscan.io/tx/${lockTxHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline"
-            >
-              View on explorer
-            </a>
-          </div>
+        {isConnected && address && (
+          <p className="text-center text-xs text-muted-foreground">
+            Connected: {address.slice(0, 6)}…{address.slice(-4)}
+          </p>
         )}
       </div>
     </div>
   );
+}
+
+/* ── Sub-component: progress while waiting on chain + attestation ───── */
+
+function CryptoProgress({
+  step,
+  status,
+  sourceExplorerUrl,
+  burnTxHash,
+}: {
+  step: "approving" | "burning" | "submitted";
+  status?: string;
+  sourceExplorerUrl: string | null;
+  burnTxHash: string | null;
+}) {
+  const lines: { label: string; state: "active" | "pending" | "done" }[] = [
+    {
+      label: "Approve USDC spend",
+      state:
+        step === "approving" ? "active" : "done",
+    },
+    {
+      label: "Burn on source chain",
+      state:
+        step === "burning"
+          ? "active"
+          : step === "submitted"
+            ? "done"
+            : "pending",
+    },
+    {
+      label: "Circle attestation",
+      state:
+        status === "PROCESSING" || status === "COMPLETED"
+          ? "done"
+          : step === "submitted"
+            ? "active"
+            : "pending",
+    },
+    {
+      label: "Mint on Stellar",
+      state: status === "COMPLETED" ? "done" : "pending",
+    },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 className="font-display text-base font-semibold text-foreground">
+        Bridging your payment
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Hang tight — settlement takes 8–20 seconds via Circle CCTP V2.
+      </p>
+
+      <ol className="mt-5 space-y-3">
+        {lines.map((line, i) => (
+          <li key={i} className="flex items-center gap-3">
+            <span
+              className={`grid h-6 w-6 place-items-center rounded-full text-[10px] font-semibold ${
+                line.state === "done"
+                  ? "bg-green-100 text-green-700"
+                  : line.state === "active"
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {line.state === "done" ? "✓" : i + 1}
+            </span>
+            <span
+              className={`text-sm ${
+                line.state === "pending"
+                  ? "text-muted-foreground"
+                  : "text-foreground"
+              }`}
+            >
+              {line.label}
+              {line.state === "active" && (
+                <Clock size={14} className="ml-2 inline animate-spin" />
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {(burnTxHash || sourceExplorerUrl) && (
+        <a
+          href={sourceExplorerUrl ?? "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-5 inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+        >
+          View burn transaction
+          <ExternalLink size={12} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────── */
+
+function extractMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+/**
+ * Poll a wagmi `refetch` until it resolves to a confirmed receipt or
+ * throws. Wraps the awkward `useWaitForTransactionReceipt` ergonomics
+ * for an imperative flow (we want one linear async chain, not a useEffect
+ * graph). Bounded by 60 attempts × 2s = 2 minutes — receipts on testnet
+ * should land in <10 attempts.
+ */
+/**
+ * Erased refetch signature — wagmi's actual type is much narrower but we
+ * only need three fields and a void-arg call shape.
+ */
+type PollableRefetch = (...args: unknown[]) => Promise<{
+  data?: unknown;
+  isError?: boolean;
+  error?: Error | null;
+}>;
+
+async function pollForReceipt(refetch: PollableRefetch): Promise<void> {
+  for (let i = 0; i < 60; i++) {
+    const result = await refetch();
+    if (result.data) return;
+    if (result.isError) {
+      throw result.error ?? new Error("Receipt fetch failed");
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error("Receipt not confirmed within 2 minutes — check your wallet");
 }

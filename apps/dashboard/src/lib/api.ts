@@ -1,9 +1,22 @@
-import { getToken, refreshAccessToken, clearTokens, isTokenExpired } from "./auth";
+import {
+  getToken,
+  refreshAccessToken,
+  clearTokens,
+  isTokenExpired,
+} from "./auth";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+/**
+ * All HTTP calls hit the versioned surface (`/v1/*`). The env var points
+ * at the origin only — we append the prefix here so callers can keep
+ * writing `api.get("/auth/me")` and not think about versioning.
+ */
+const API_ORIGIN = (
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333"
+).replace(/\/$/, "");
+const BASE_URL = `${API_ORIGIN}/v1`;
 
 function getApiConnectionErrorMessage() {
-  return `Cannot reach the Useroutr API at ${BASE_URL}. Start it with \`npm run start:api\` or set NEXT_PUBLIC_API_URL.`;
+  return `Cannot reach the Useroutr API at ${API_ORIGIN}. Start it with \`npm run start:api\` or set NEXT_PUBLIC_API_URL.`;
 }
 
 interface RequestOptions {
@@ -71,9 +84,14 @@ async function getValidToken(): Promise<string | null> {
 async function request<T>(
   method: string,
   path: string,
-  options: RequestOptions & { body?: unknown } = {}
+  options: RequestOptions & { body?: unknown } = {},
 ): Promise<T> {
-  const url = new URL(path, BASE_URL);
+  // Concatenate rather than `new URL(path, BASE_URL)` — the URL constructor's
+  // second-arg behaviour treats an absolute `path` ("/auth/login") as a
+  // pathname replacement, which would silently strip the "/v1" version
+  // prefix from BASE_URL. The string-join approach is unambiguous.
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = new URL(`${BASE_URL}${normalizedPath}`);
 
   if (options.params) {
     Object.entries(options.params).forEach(([key, value]) => {
@@ -87,7 +105,8 @@ async function request<T>(
 
   let res: Response;
 
-  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
 
   try {
     res = await fetch(url.toString(), {
@@ -97,75 +116,97 @@ async function request<T>(
         ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
-      body: isFormData ? (options.body as FormData) : options.body ? JSON.stringify(options.body) : undefined,
+      body: isFormData
+        ? (options.body as FormData)
+        : options.body
+          ? JSON.stringify(options.body)
+          : undefined,
     });
   } catch {
     throw new Error(getApiConnectionErrorMessage());
   }
 
-  if (res.status === 401) {
-    // Attempt one more refresh
-    if (typeof window !== "undefined") {
-      const newToken = await refreshAccessToken();
-      if (!newToken) {
-        clearTokens();
-        window.location.href = "/login";
-        throw new Error("Session expired");
-      }
-
-      // Retry the original request with new token
-      let retryRes: Response;
-
-      try {
-        retryRes = await fetch(url.toString(), {
-          method,
-          headers: {
-            ...(isFormData ? {} : { "Content-Type": "application/json" }),
-            Authorization: `Bearer ${newToken}`,
-            ...options.headers,
-          },
-          body: isFormData ? (options.body as FormData) : options.body ? JSON.stringify(options.body) : undefined,
-        });
-      } catch {
-        throw new Error(getApiConnectionErrorMessage());
-      }
-
-      if (retryRes.status === 401) {
-        clearTokens();
-        window.location.href = "/login";
-        throw new Error("Session expired");
-      }
-
-      if (!retryRes.ok) {
-        const retryErrorBody = await parseResponse<ApiErrorBody>(
-          retryRes
-        ).catch(() => ({} as ApiErrorBody));
-        throw new Error(
-          extractErrorMessage(retryErrorBody, `API error: ${retryRes.status} ${retryRes.statusText}`)
-        );
-      }
-
-      return parseResponse<T>(retryRes);
+  // The "session expired → refresh → retry" dance only makes sense when we
+  // actually sent a token. A 401 from an unauthenticated request — e.g.
+  // POST /auth/login with the wrong password, or any public endpoint with
+  // bad input — means "credentials rejected," not "session timed out."
+  // Treating both the same way silently masks real auth errors ("Invalid
+  // email or password") behind the misleading "Session expired" banner and
+  // bounces the user back to /login they're already on.
+  if (res.status === 401 && token && typeof window !== "undefined") {
+    const newToken = await refreshAccessToken();
+    if (!newToken) {
+      clearTokens();
+      window.location.href = "/login";
+      throw new Error("Session expired");
     }
+
+    // Retry the original request with new token
+    let retryRes: Response;
+
+    try {
+      retryRes = await fetch(url.toString(), {
+        method,
+        headers: {
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
+          Authorization: `Bearer ${newToken}`,
+          ...options.headers,
+        },
+        body: isFormData
+          ? (options.body as FormData)
+          : options.body
+            ? JSON.stringify(options.body)
+            : undefined,
+      });
+    } catch {
+      throw new Error(getApiConnectionErrorMessage());
+    }
+
+    if (retryRes.status === 401) {
+      clearTokens();
+      window.location.href = "/login";
+      throw new Error("Session expired");
+    }
+
+    if (!retryRes.ok) {
+      const retryErrorBody = await parseResponse<ApiErrorBody>(
+        retryRes,
+      ).catch(() => ({}) as ApiErrorBody);
+      throw new Error(
+        extractErrorMessage(
+          retryErrorBody,
+          `API error: ${retryRes.status} ${retryRes.statusText}`,
+        ),
+      );
+    }
+
+    return parseResponse<T>(retryRes);
   }
 
   if (!res.ok) {
     const errorBody = await parseResponse<ApiErrorBody>(res).catch(
-      () => ({} as ApiErrorBody)
+      () => ({}) as ApiErrorBody,
     );
-    throw new Error(extractErrorMessage(errorBody, `API error: ${res.status} ${res.statusText}`));
+    throw new Error(
+      extractErrorMessage(
+        errorBody,
+        `API error: ${res.status} ${res.statusText}`,
+      ),
+    );
   }
 
   return parseResponse<T>(res);
 }
 
 export const api = {
-  get: <T>(path: string, options?: RequestOptions) => request<T>("GET", path, options),
+  get: <T>(path: string, options?: RequestOptions) =>
+    request<T>("GET", path, options),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>("POST", path, { ...options, body }),
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>("PUT", path, { ...options, body }),
   patch: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>("PATCH", path, { ...options, body }),
-  delete: <T>(path: string, options?: RequestOptions) => request<T>("DELETE", path, options),
+  delete: <T>(path: string, options?: RequestOptions) =>
+    request<T>("DELETE", path, options),
 };

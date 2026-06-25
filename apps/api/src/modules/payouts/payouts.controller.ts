@@ -18,7 +18,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentMerchant } from '../merchant/decorators/current-merchant.decorator';
 
-@Controller('v1/payouts')
+// Global `/v1` prefix is set in main.ts — controller routes are relative.
+@Controller('payouts')
 @UseGuards(CombinedAuthGuard)
 export class PayoutsController {
   constructor(private readonly payoutsService: PayoutsService) {}

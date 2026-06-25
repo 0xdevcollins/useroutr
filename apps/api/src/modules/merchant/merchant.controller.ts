@@ -22,11 +22,15 @@ import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { RolesGuard } from './guards/roles.guard';
 import { MerchantService } from './merchant.service';
+import { MerchantSettlementService } from './merchant-settlement.service';
 
 @Controller('merchants')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MerchantController {
-  constructor(private readonly merchantService: MerchantService) {}
+  constructor(
+    private readonly merchantService: MerchantService,
+    private readonly settlement: MerchantSettlementService,
+  ) {}
 
   // ── Profile ──────────────────────────────────────────────────
 
@@ -51,6 +55,25 @@ export class MerchantController {
     @Body() dto: SettlementDto,
   ) {
     return this.merchantService.updateSettlement(merchantId, dto);
+  }
+
+  /**
+   * Manually provision (or re-provision) a managed Stellar settlement
+   * wallet. Idempotent — returns the existing address if one is already
+   * on file. Used by:
+   *
+   *   - Merchants who registered before PR 7.9a shipped (settlementAddress
+   *     is empty on their row)
+   *   - Merchants who hit a transient Horizon outage at register time
+   *     and need to retry
+   *
+   * Dashboard surfaces this as a one-click button in the settlement
+   * settings card when `settlementAddress` is null.
+   */
+  @Post('me/settlement/provision')
+  @HttpCode(HttpStatus.OK)
+  provisionSettlement(@CurrentMerchant('id') merchantId: string) {
+    return this.settlement.provision(merchantId);
   }
 
   // ── Branding ─────────────────────────────────────────────────

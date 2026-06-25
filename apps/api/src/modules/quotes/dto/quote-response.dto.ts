@@ -50,7 +50,8 @@ export class QuoteResponseDto {
   feeBps!: number;
 
   /**
-   * Bridge provider: "cctp", "wormhole", "layerswap", or null for native
+   * Route provider: "cctp_v2" for cross-chain USDC, "stellar_native" for
+   * Stellar↔Stellar path payments, or null for same-asset same-chain.
    */
   bridgeProvider!: string | null;
 

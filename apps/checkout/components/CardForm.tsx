@@ -7,10 +7,12 @@ import {
   CardNumberElement,
   useElements,
   useStripe,
-  type StripeCardCvcElementChangeEvent,
-  type StripeCardExpiryElementChangeEvent,
-  type StripeCardNumberElementChangeEvent,
 } from "@stripe/react-stripe-js";
+import type {
+  StripeCardCvcElementChangeEvent,
+  StripeCardExpiryElementChangeEvent,
+  StripeCardNumberElementChangeEvent,
+} from "@stripe/stripe-js";
 import { CreditCard, ArrowClockwise } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/utils";

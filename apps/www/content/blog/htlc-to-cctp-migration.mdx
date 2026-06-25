@@ -1,0 +1,44 @@
+---
+title: "We swapped 5,000 lines of HTLC contracts for 800 lines of CCTP wiring. Here's why it was worth it."
+category: "Engineering"
+author: "Daniel Otieno"
+date: "2026-05-12"
+excerpt: "Pre-CCTP-V2 we maintained HTLC contracts on six EVM chains. We deleted them all. The math, the diff, the audit savings."
+readTime: "8 min"
+---
+
+Pre-CCTP-V2 we maintained HTLC contracts on six EVM chains. We deleted them all. The math, the diff, the audit savings.
+
+## What we had
+
+The original Useroutr cross-chain architecture used Hash Time-Locked Contracts (HTLCs) on every supported EVM chain. The flow: payer locks funds in an HTLC on the source chain, we watch for the lock event, route through Stellar, and reveal the secret to claim on the source chain — which simultaneously allows the merchant to claim on the destination chain.
+
+The deploy matrix at peak: Ethereum mainnet, Base, Optimism, Arbitrum, Polygon, Avalanche. Six chains, six deployments, six sets of constructor arguments, six entries in our deployment registry.
+
+Audit cycles: every time we changed the HTLC logic, we needed a new audit. At $40–80k per audit engagement, and with a 6–8 week turnaround, this was a meaningful constraint on our ability to ship. We ran two full audits in 18 months.
+
+Gas costs: HTLC deployment is not cheap. Each deployment cost roughly 800k–1.2M gas depending on the chain. More importantly, every HTLC interaction — lock, claim, refund — required a transaction from our relay service, which meant we were paying gas on both sides of every payment.
+
+## What we got
+
+CCTP V2 changes the model entirely. Circle deploys and maintains the `TokenMessenger` and `MessageTransmitter` contracts on every supported chain. We don't deploy anything. We call their contracts.
+
+The integration surface is two functions: `depositForBurn` on the source chain, and `receiveMessage` on the destination chain. The attestation — the cryptographic proof that the burn happened — comes from Circle's Iris service via a simple HTTP poll.
+
+Our CCTP wiring is 800 lines of TypeScript across three files: the burn caller, the Iris poller, and the mint caller. The HTLC contracts were 5,000+ lines of Solidity across six deployments, plus the relay service that watched for events and propagated secrets.
+
+The audit savings are real: Circle's contracts are audited by Circle, with multiple independent audits published. We don't audit what we don't own.
+
+## The risks we took
+
+Single-point-of-dependency on Iris. If Circle's attestation service goes down, cross-chain payments stall. We can't mint without an attestation.
+
+We mitigated this two ways. First, we added a readiness probe to our payment flow: before accepting a payment that requires CCTP, we check Iris's health endpoint. If Iris is degraded, we surface that to the merchant and offer Standard Transfer (slower, no attestation required) as a fallback.
+
+Second, we subscribe to Circle's status page and have a PagerDuty integration that fires if Iris degrades. Our SLA for cross-chain payments is explicitly conditioned on Iris availability — we're transparent about this in our docs and contracts.
+
+## The diff
+
+The PR that removed the HTLC contracts was the most satisfying diff I've written in years. `-5,247 lines` of Solidity, deployment scripts, and relay logic. `+812 lines` of TypeScript. Net: we deleted more code than we wrote, and the result is more reliable, cheaper to operate, and audited by a team with more resources than ours.
+
+The lesson isn't "don't write contracts." It's "don't maintain infrastructure that a well-capitalized, well-audited team is already maintaining for you."
