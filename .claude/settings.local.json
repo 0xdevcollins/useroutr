@@ -33,7 +33,10 @@
       "Bash(/usr/bin/head -30)",
       "Bash(/usr/bin/grep -n 'sub\\\\|JwtPayload\\\\|interface.*Payload' /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/modules/auth/strategies/jwt.strategy.ts)",
       "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/modules/auth -name '*.ts' -not -name '*.spec.ts')",
-      "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/common -name '*.spec.ts')"
+      "Bash(/usr/bin/find /Users/0xdevcollins/Documents/startups/tavvio/apps/api/src/common -name '*.spec.ts')",
+      "Bash(find /Users/0xdevcollins -type d -name \"useroutr\" 2>/dev/null | head -5)",
+      "Bash(cd /tmp/useroutr && cat -n apps/dashboard/src/components/overview/GreetingHeader.tsx 2>&1)",
+      "Bash(cd /tmp/useroutr && cat -n apps/dashboard/src/components/overview/MetricCard.tsx 2>&1)"
     ]
   }
 }
