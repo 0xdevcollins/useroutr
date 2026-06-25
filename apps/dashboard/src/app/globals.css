@@ -9,8 +9,200 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme inline {
+  /* ── Colors ── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  /* ── Chart palette ── */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* ── Brand palette ── */
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-blue: var(--blue);
+  --color-blue2: var(--blue2);
+  --color-teal: var(--teal);
+  --color-amber: var(--amber);
+  --color-red: var(--red);
+  --color-green: var(--green);
+  --color-purple: var(--purple);
+
+  /* ── Font families ── */
+  --font-display: var(--font-hanken), "Trebuchet MS", sans-serif;
+  --font-body: var(--font-hanken), sans-serif;
+  --font-mono: var(--font-jet-mono), "JetBrains Mono", Menlo, monospace;
+
+  /* ── Radius ── */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+
+  /* ── Sidebar ── */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  /* ── Dark mode page tokens ── */
+  --color-bg-page: var(--bg-page);
+  --color-bg-card: var(--bg-card);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border-color: var(--border-color);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-code-bg: var(--code-bg);
+
+  /* ── Chart theming tokens ── */
+  --color-chart-tick: var(--chart-tick);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-tooltip-bg: var(--chart-tooltip-bg);
+  --color-chart-tooltip-text: var(--chart-tooltip-text);
+
+  /* ── Status tokens ── */
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-text: var(--status-success-text);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-text: var(--status-warning-text);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-error-text: var(--status-error-text);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-text: var(--status-info-text);
+  --color-status-purple-bg: var(--status-purple-bg);
+  --color-status-purple-text: var(--status-purple-text);
+  --color-status-amber-bg: var(--status-amber-bg);
+  --color-status-amber-text: var(--status-amber-text);
+}
+
 :root {
   --header-height: 3.5rem;
+
+  /* ── Dark mode specific tokens (dark-first) ── */
+  --bg-page: #0B1628;
+  --bg-card: #1A2332;
+  --bg-sidebar: #0F1D2E;
+  --text-primary: #F8F9FA;
+  --text-secondary: #6C757D;
+  --border-color: #2D3748;
+  --input-bg: #1A2332;
+  --input-border: #2D3748;
+  --code-bg: #0B1628;
+
+  /* ── Chart theming tokens ── */
+  --chart-tick: #F8F9FA;
+  --chart-grid: rgba(248, 249, 250, 0.08);
+  --chart-tooltip-bg: #1A2332;
+  --chart-tooltip-text: #F8F9FA;
+  --chart-tooltip-border: #2D3748;
+
+  /* ── Semantic status tokens ── */
+  --status-success-bg: rgba(34, 197, 94, 0.12);
+  --status-success-text: #4ade80;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-text: #fbbf24;
+  --status-error-bg: rgba(239, 68, 68, 0.12);
+  --status-error-text: #f87171;
+  --status-info-bg: rgba(59, 130, 246, 0.12);
+  --status-info-text: #60a5fa;
+  --status-purple-bg: rgba(168, 85, 247, 0.12);
+  --status-purple-text: #c084fc;
+  --status-amber-bg: rgba(245, 158, 11, 0.12);
+  --status-amber-text: #fbbf24;
+
+  /* Sidebar uses Useroutr ink tiers for dark-first design */
+  --sidebar: var(--ink2);
+  --sidebar-foreground: var(--lead);
+  --sidebar-primary: var(--blue);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: var(--ink3);
+  --sidebar-accent-foreground: var(--lead);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--blue2);
+}
+
+.light {
+  --bg-page: #FFFFFF;
+  --bg-card: #F8F9FA;
+  --bg-sidebar: #F3F4F6;
+  --text-primary: #1A202C;
+  --text-secondary: #6B7280;
+  --border-color: #E2E8F0;
+  --input-bg: #FFFFFF;
+  --input-border: #D1D5DB;
+  --code-bg: #F1F5F9;
+
+  --chart-tick: #1A202C;
+  --chart-grid: rgba(0, 0, 0, 0.08);
+  --chart-tooltip-bg: #FFFFFF;
+  --chart-tooltip-text: #1A202C;
+  --chart-tooltip-border: #E2E8F0;
+
+  --status-success-bg: rgba(34, 197, 94, 0.1);
+  --status-success-text: #16a34a;
+  --status-warning-bg: rgba(245, 158, 11, 0.1);
+  --status-warning-text: #d97706;
+  --status-error-bg: rgba(239, 68, 68, 0.1);
+  --status-error-text: #dc2626;
+  --status-info-bg: rgba(59, 130, 246, 0.1);
+  --status-info-text: #2563eb;
+  --status-purple-bg: rgba(168, 85, 247, 0.1);
+  --status-purple-text: #7c3aed;
+  --status-amber-bg: rgba(245, 158, 11, 0.1);
+  --status-amber-text: #d97706;
+
+  --sidebar: oklch(0.975 0.003 265);
+  --sidebar-foreground: oklch(0.15 0.01 265);
+  --sidebar-primary: var(--blue);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.945 0.006 265);
+  --sidebar-accent-foreground: oklch(0.15 0.01 265);
+  --sidebar-border: oklch(0.88 0.008 265);
+  --sidebar-ring: var(--blue2);
+}
+
+.dark {
+  --sidebar: var(--bg-sidebar);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--blue);
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1E293B;
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-color);
+  --sidebar-ring: var(--blue2);
 }
 
 @layer base {

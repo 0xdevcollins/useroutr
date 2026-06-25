@@ -12,10 +12,10 @@ const columns: { title: string; links: LinkItem[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Hosted checkout", href: "/#product" },
-      { label: "Pay by link", href: "/#product" },
-      { label: "Invoices", href: "/#product" },
-      { label: "Global payouts", href: "/#product" },
+      { label: "Hosted checkout", href: "/products/hosted-checkout" },
+      { label: "Pay by link", href: "/products/pay-by-link" },
+      { label: "Invoices", href: "/products/invoicing" },
+      { label: "Global payouts", href: "/products/payouts" },
       { label: "Pricing", href: "/pricing" },
     ],
   },
@@ -41,6 +41,7 @@ const columns: { title: string; links: LinkItem[] }[] = [
     title: "Company",
     links: [
       { label: "About", href: "/about" },
+      { label: "Blog", href: "/blog" },
       { label: "Use cases", href: "/use-cases" },
       { label: "Customers", href: "/customers" },
       { label: "Press", href: "/press" },

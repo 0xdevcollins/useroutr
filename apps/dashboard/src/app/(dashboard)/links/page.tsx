@@ -1,327 +1,253 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  Button,
-  Input,
-  Select,
-  EmptyState,
-  Skeleton,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@useroutr/ui";
-import { Plus, MagnifyingGlass, Link as LinkIcon } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Button, Skeleton } from "@useroutr/ui";
 import { useToast } from "@useroutr/ui";
-import { PageHeader } from "@/components/brand/PageHeader";
-import { EmptyState as BrandEmptyState } from "@/components/brand/EmptyState";
-import { LinkCard } from "@/components/links/LinkCard";
-import { CreateLinkModal } from "@/components/links/CreateLinkModal";
-import { LinkCreatedModal } from "@/components/links/LinkCreatedModal";
-import { QRCodeModal } from "@/components/links/QRCodeModal";
-import {
-  usePaymentLinks,
-  useCreatePaymentLink,
-  useDeactivatePaymentLink,
-} from "@/hooks/usePaymentLinks";
-import { useDashboardSocket } from "@/hooks/useDashboardSocket";
-import type { PaymentLink, CreatePaymentLinkInput } from "@useroutr/types";
+import Link from "next/link";
+import { LinkStatusBadge } from "@/components/links/LinkStatusBadge";
+import { formatCurrency } from "@/lib/utils";
 
-// Simple debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+import type { PaymentLink } from "@useroutr/types";
+
+export default function LinkDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { toast } = useToast();
+
+  const [link, setLink] = useState<PaymentLink | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function fetchData() {
+    try {
+      setLoading(true);
+
+      const [linkRes, statsRes, paymentsRes] = await Promise.all([
+        fetch(`/v1/payment-links/${id}`),
+        fetch(`/v1/payment-links/${id}/stats`),
+        fetch(`/v1/payments?linkId=${id}`),
+      ]);
+
+      if (!linkRes.ok) {
+        setLink(null);
+        return;
+      }
+
+      const linkData = await linkRes.json();
+      const statsData = await statsRes.json();
+      const paymentsData = await paymentsRes.json();
+
+      setLink(linkData);
+      setStats(statsData);
+      setPayments(paymentsData?.data ?? paymentsData ?? []);
+    } catch (err: any) {
+      toast(`Failed to load link`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
+    fetchData();
+  }, [id]);
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
+  async function copyUrl() {
+    if (!link) return;
+    await navigator.clipboard.writeText(link.url);
+    toast("Copied link", "success");
+  }
 
-  return debouncedValue;
-}
+  function downloadQr() {
+    if (!link?.qrCodeUrl) return;
 
-function LinkCardSkeleton() {
+    const a = document.createElement("a");
+    a.href = link.qrCodeUrl;
+    a.download = `${link.id}.png`;
+    a.click();
+  }
+
+  async function deactivate() {
+    if (!link) return;
+
+    const ok = window.confirm(
+      "Are you sure you want to deactivate this link?"
+    );
+
+    if (!ok) return;
+
+    await fetch(`/v1/payment-links/${link.id}`, {
+      method: "DELETE",
+    });
+
+    toast("Link deactivated", "success");
+
+    fetchData();
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-40" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-60 w-full" />
+      </div>
+    );
+  }
+
+  if (!link) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-muted-foreground">Link not found</p>
+        <Link href="/links">
+          <Button className="mt-4">Back to links</Button>
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
-      <div className="flex items-start justify-between">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-5 w-16 rounded-full" />
+    <div className="space-y-6">
+      {/* BACK */}
+      <Link
+        href="/links"
+        className="text-sm text-muted-foreground"
+      >
+        ← Back to links
+      </Link>
+
+      {/* HERO */}
+      <div className="rounded-lg border p-6 space-y-3">
+        <div className="flex justify-between">
+          <span className="font-mono text-xs">{link.id}</span>
+          <LinkStatusBadge status={link.status} />
+        </div>
+
+        <div className="text-3xl font-semibold">
+          {link.amount
+            ? formatCurrency(link.amount, link.currency)
+            : "Open amount"}
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          {link.description}
+        </p>
+
+        {/* ACTIONS */}
+        <div className="flex gap-2 pt-2">
+          <Button onClick={copyUrl} className="flex-1">
+            Copy URL
+          </Button>
+
+          <Button onClick={downloadQr} className="flex-1">
+            Download QR
+          </Button>
+        </div>
       </div>
-      <Skeleton className="mt-4 h-7 w-24" />
-      <Skeleton className="mt-3 h-4 w-full" />
-      <div className="mt-4 flex items-center justify-between">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-24" />
+
+      {/* STATS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Stat label="Views" value={stats?.totalViews ?? 0} />
+        <Stat label="Payments" value={stats?.totalPayments ?? 0} />
+        <Stat
+          label="Conversion"
+          value={`${stats?.conversionRate ?? 0}%`}
+        />
+        <Stat
+          label="Revenue"
+          value={formatCurrency(
+            stats?.totalRevenue ?? 0,
+            stats?.currency ?? link.currency
+          )}
+        />
       </div>
-      <div className="mt-4 flex gap-2 border-t border-[var(--border)] pt-4">
-        <Skeleton className="h-8 flex-1" />
-        <Skeleton className="h-8 flex-1" />
-        <Skeleton className="h-8 w-8" />
+
+      {/* PAYMENTS */}
+      <div className="border rounded-lg p-6">
+        <h3 className="mb-4 font-medium">Recent Payments</h3>
+
+        {payments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No payments yet
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {payments.slice(0, 10).map((p: any) => (
+              <Link
+                key={p.id}
+                href={`/payments/${p.id}`}
+                className="flex justify-between text-sm border-b py-2"
+              >
+                <span>{p.payer ?? "—"}</span>
+                <span>
+                  {formatCurrency(p.amount, p.currency)}
+                </span>
+                <span>{p.status}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        <Link
+          href={`/payments?linkId=${link.id}`}
+          className="text-sm text-primary block mt-4"
+        >
+          View all payments →
+        </Link>
+      </div>
+
+      {/* SIDEBAR */}
+      <div className="border rounded-lg p-6 space-y-2">
+        <p>
+          <strong>Created:</strong>{" "}
+          {new Date(link.createdAt).toLocaleString()}
+        </p>
+
+        <p>
+          <strong>Updated:</strong>{" "}
+          {new Date(link.updatedAt).toLocaleString()}
+        </p>
+
+        <p>
+          <strong>Type:</strong> {link.type}
+        </p>
+
+        <p>
+          <strong>Expiry:</strong>{" "}
+          {link.expiresAt
+            ? new Date(link.expiresAt).toLocaleDateString()
+            : "Never"}
+        </p>
+
+        {link.status === "active" && (
+          <Button
+            variant="destructive"
+            className="w-full mt-3"
+            onClick={deactivate}
+          >
+            Deactivate Link
+          </Button>
+        )}
       </div>
     </div>
   );
 }
 
-export default function PaymentLinksPage() {
-  const { toast } = useToast();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createdLink, setCreatedLink] = useState<PaymentLink | null>(null);
-  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [selectedLinkForQR, setSelectedLinkForQR] = useState<PaymentLink | null>(null);
-  const [linkToDeactivate, setLinkToDeactivate] = useState<PaymentLink | null>(null);
-
-  // Debounce search input (300ms)
-  const debouncedSearch = useDebounce(search, 300);
-
-  const { data, isLoading, refetch } = usePaymentLinks({
-    status: statusFilter !== "all" ? statusFilter : undefined,
-    search: debouncedSearch || undefined,
-  });
-
-  const createMutation = useCreatePaymentLink();
-  const deactivateMutation = useDeactivatePaymentLink();
-
-  // WebSocket for real-time payment notifications
-  const { subscribe } = useDashboardSocket();
-
-  useEffect(() => {
-    // Subscribe to payment link payment events
-    const unsubscribe = subscribe("payment-link.payment", (...args: unknown[]) => {
-      const payload = args[0] as { linkId: string; amount: number };
-      toast(`Payment received: $${payload.amount}`, "success");
-      refetch();
-    });
-
-    return () => unsubscribe();
-  }, [subscribe, toast, refetch]);
-
-  const handleCreate = (data: CreatePaymentLinkInput) => {
-    createMutation.mutate(data, {
-      onSuccess: (newLink) => {
-        setCreatedLink(newLink);
-        setIsCreateModalOpen(false);
-        toast("Payment link created successfully!", "success");
-      },
-      onError: (error) => {
-        toast(`Failed to create link: ${error.message}`, "error");
-      },
-    });
-  };
-
-  const handleDeactivate = (link: PaymentLink) => {
-    setLinkToDeactivate(link);
-  };
-
-  const confirmDeactivate = () => {
-    if (!linkToDeactivate) return;
-
-    deactivateMutation.mutate(linkToDeactivate.id, {
-      onSuccess: () => {
-        toast("Link deactivated successfully", "success");
-        setLinkToDeactivate(null);
-      },
-      onError: (error) => {
-        toast(`Failed to deactivate: ${error.message}`, "error");
-      },
-    });
-  };
-
-  const handleQRCode = (link: PaymentLink) => {
-    setSelectedLinkForQR(link);
-    setIsQRModalOpen(true);
-  };
-
-  const links = data?.data ?? [];
-  const hasLinks = links.length > 0;
-
-  // Determine if filters are active
-  const hasActiveFilters = debouncedSearch.length > 0 || statusFilter !== "all";
-
-  // Show empty state for "no links" vs "no results"
-  const showNoResults = hasActiveFilters && !hasLinks;
-  const showNoLinks = !hasActiveFilters && !hasLinks;
-
+/* ---------- helper ---------- */
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
-    <div className="space-y-8 dashboard-enter">
-      <PageHeader
-        eyebrow="Payment links"
-        title={
-          <>
-            Shareable URLs that{" "}
-            <span className="editorial-italic text-muted-foreground">
-              actually pay.
-            </span>
-          </>
-        }
-        description="Fixed amount or open, single-use or reusable. Generate a link and share it anywhere — checkout opens on click."
-        actions={
-          <Button onClick={() => setIsCreateModalOpen(true)}>
-            <Plus size={18} />
-            New link
-          </Button>
-        }
-      />
-
-      {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlass
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-          />
-          <Input
-            placeholder="Search links..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        <Select
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          options={[
-            { value: "all", label: "All Statuses" },
-            { value: "active", label: "Active" },
-            { value: "expired", label: "Expired" },
-            { value: "deactivated", label: "Deactivated" },
-          ]}
-          className="w-full sm:w-auto"
-        />
+    <div className="border rounded-lg p-4">
+      <div className="text-xs text-muted-foreground">
+        {label}
       </div>
-
-      {/* Links Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <LinkCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : hasLinks ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {links.map((link) => (
-            <LinkCard
-              key={link.id}
-              link={link}
-              onQRCode={handleQRCode}
-              onDeactivate={handleDeactivate}
-            />
-          ))}
-        </div>
-      ) : showNoResults ? (
-        <EmptyState
-          icon={LinkIcon}
-          title="No links match your filters"
-          description="Try adjusting your search or filter criteria"
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setSearch("");
-                setStatusFilter("all");
-              }}
-            >
-              Clear Filters
-            </Button>
-          }
-        />
-      ) : showNoLinks ? (
-        <BrandEmptyState
-          variant="links"
-          title="No payment links yet"
-          body="Create a shareable URL with a fixed or open amount, optional expiry, and single-use lock. We'll handle the checkout."
-          cta={{
-            label: "Create your first link",
-            onClick: () => setIsCreateModalOpen(true),
-          }}
-        />
-      ) : null}
-
-      {/* Create Link Modal */}
-      <CreateLinkModal
-        open={isCreateModalOpen}
-        onOpenChange={setIsCreateModalOpen}
-        onCreate={handleCreate}
-        isLoading={createMutation.isPending}
-      />
-
-      {/* Link Created Modal */}
-      {createdLink && (
-        <LinkCreatedModal
-          open={!!createdLink}
-          onOpenChange={(open) => {
-            if (!open) setCreatedLink(null);
-          }}
-          linkUrl={createdLink.url}
-          linkName={createdLink.description || "Payment Link"}
-        />
-      )}
-
-      {/* QR Code Modal */}
-      {selectedLinkForQR && (
-        <QRCodeModal
-          open={isQRModalOpen}
-          onOpenChange={setIsQRModalOpen}
-          url={selectedLinkForQR.url}
-          linkName={selectedLinkForQR.description || "Payment Link"}
-        />
-      )}
-
-      {/* Deactivate Confirmation Dialog */}
-      <Dialog
-        open={!!linkToDeactivate}
-        onOpenChange={(open) => {
-          if (!open) setLinkToDeactivate(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Deactivate Link</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to deactivate this payment link? No more payments will be accepted.
-            </DialogDescription>
-          </DialogHeader>
-
-          {linkToDeactivate && (
-            <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] p-4">
-              <p className="font-medium text-[var(--foreground)]">
-                {linkToDeactivate.description || linkToDeactivate.id}
-              </p>
-              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                {linkToDeactivate.url}
-              </p>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setLinkToDeactivate(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={confirmDeactivate}
-              loading={deactivateMutation.isPending}
-            >
-              Deactivate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="text-lg font-semibold">{value}</div>
     </div>
   );
 }
