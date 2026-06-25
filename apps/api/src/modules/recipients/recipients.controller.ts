@@ -12,8 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { RecipientsService } from './recipients.service';
-import { CreateRecipientDto } from './dto/create-recipient.dto';
-import { RecipientFiltersDto } from './dto/recipient-filters.dto';
+import { CreateRecipientDto, CreateRecipientSchema } from './dto/create-recipient.dto';
+import { RecipientFiltersDto, RecipientFiltersSchema } from './dto/recipient-filters.dto';
 import { UpdateRecipientDto } from './dto/update-recipient.dto';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -29,7 +29,7 @@ export class RecipientsController {
   @HttpCode(HttpStatus.CREATED)
   async create(
     @CurrentMerchant('id') merchantId: string,
-    @Body(new ZodValidationPipe(CreateRecipientDto.schema))
+    @Body(new ZodValidationPipe(CreateRecipientSchema))
     dto: CreateRecipientDto,
   ) {
     return this.recipientsService.create(merchantId, dto);
@@ -39,7 +39,7 @@ export class RecipientsController {
   @UseGuards(JwtAuthGuard)
   async list(
     @CurrentMerchant('id') merchantId: string,
-    @Query(new ZodValidationPipe(RecipientFiltersDto.schema))
+    @Query(new ZodValidationPipe(RecipientFiltersSchema))
     filters: RecipientFiltersDto,
   ) {
     return this.recipientsService.list(merchantId, filters);
