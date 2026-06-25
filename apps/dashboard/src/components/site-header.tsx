@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Moon, Monitor, SidebarIcon, Sun } from "lucide-react";
+import { SidebarIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -14,15 +14,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useTheme } from "@/providers/ThemeProvider";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
-
 
 const routeLabels: Record<string, string> = {
   "/": "Overview",
@@ -40,7 +33,6 @@ const routeLabels: Record<string, string> = {
 
 export function SiteHeader() {
   const { toggleSidebar } = useSidebar();
-  const { preference, toggleTheme } = useTheme();
   const pathname = usePathname();
 
   const segments = pathname.split("/").filter(Boolean);
@@ -84,34 +76,9 @@ export function SiteHeader() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={toggleTheme}
-                aria-label={`Theme: ${preference}`}
-              >
-                {preference === "dark" ? (
-                  <Moon className="size-4" />
-                ) : preference === "light" ? (
-                  <Sun className="size-4" />
-                ) : (
-                  <Monitor className="size-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {preference === "light"
-                ? "Light mode — click for dark"
-                : preference === "dark"
-                  ? "Dark mode — click for system"
-                  : "System mode — click for light"}
-            </TooltipContent>
-          </Tooltip>
+          <ThemeToggle size="sm" />
         </div>
       </div>
     </header>

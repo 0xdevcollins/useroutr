@@ -1,0 +1,38 @@
+---
+title: "Why we picked CCTP V2 over Circle Gateway"
+category: "Engineering"
+author: "Lukas Vogel"
+date: "2026-05-20"
+excerpt: "When Circle shipped Gateway in May 2026, we evaluated whether to rebuild our cross-chain story around it. We didn't. Here's the actual decision."
+readTime: "6 min"
+---
+
+When Circle shipped Gateway in May 2026, we evaluated whether to rebuild our cross-chain story around it. We didn't. Here's the actual decision.
+
+## The product gap
+
+Gateway is a compelling product for a specific use case: merchants who want to accept crypto payments and receive fiat. It handles the conversion, the compliance, and the settlement. For that use case, it's excellent.
+
+But Stellar isn't on Gateway mainnet. That's not a minor footnote for us — Stellar is our settlement hub. Every payment we process routes through Stellar's path payment system. The economics of our fee model depend on Stellar's liquidity pools. Our managed wallet infrastructure is built on Stellar's account model.
+
+Gateway's chain support at launch: Ethereum, Base, Solana, Polygon. Stellar: not on the roadmap for mainnet.
+
+## The model mismatch
+
+Gateway is designed around a pre-deposit model. Merchants fund a Gateway account, and Circle handles the conversion and settlement from that float. It's a clean UX for the merchant, but it means Circle is holding funds — which means the merchant is exposed to Circle's credit risk, and Circle needs to be a money transmitter in every jurisdiction where the merchant operates.
+
+Useroutr's model is different. We don't hold funds. Settlement happens on-chain, atomically, in the same transaction that moves money from the payer to the merchant. There's no float, no credit exposure, no custody.
+
+CCTP V2 fits this model. It's a burn-and-mint protocol: USDC is burned on the source chain, an attestation is issued by Circle's Iris service, and USDC is minted on the destination chain. We call the contracts; Circle operates the attestation service. No pre-deposit, no float, no custody.
+
+## What Stripe is doing
+
+Stripe added CCTP V2 support in Q1 2026. They didn't add Gateway. That's a signal worth paying attention to. Stripe's payments team has more context on the tradeoffs between these two models than almost anyone, and they chose the burn-and-mint primitive over the managed-float product.
+
+Our read: CCTP V2 is the rail. Gateway is a product built on top of a different model. For infrastructure builders, the rail is what matters.
+
+## When we'd revisit
+
+If Stellar lands on Gateway mainnet and Circle adds a non-custodial settlement path, we'd look again. The developer experience on Gateway is genuinely better than wiring CCTP V2 directly — Circle has done a lot of work to make the integration surface clean.
+
+But "better DX on a model that doesn't fit" isn't a reason to switch. We'll keep watching the Gateway roadmap. For now, CCTP V2 is the right call.

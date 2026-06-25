@@ -4,8 +4,6 @@ import { Hanken_Grotesk, Fraunces, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
-import { RealtimeToastNotifications } from "@/providers/RealtimeToastNotifications";
-import { NotificationsProvider } from "@/providers/NotificationsProvider";
 import "./globals.css";
 import { ToastProvider } from "@useroutr/ui";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -52,6 +50,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var p=localStorage.getItem("useroutr-theme");var t=p==="dark"?"dark":p==="light"?"light":window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.classList.add(t)}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body
         className={`${hanken.variable} ${fraunces.variable} ${jetMono.variable} antialiased`}
       >
@@ -60,12 +65,7 @@ export default function RootLayout({
             <Suspense>
               <AuthProvider>
                 <TooltipProvider>
-                  <ToastProvider>
-                    <NotificationsProvider>
-                      <RealtimeToastNotifications />
-                      {children}
-                    </NotificationsProvider>
-                  </ToastProvider>
+                  <ToastProvider>{children}</ToastProvider>
                 </TooltipProvider>
               </AuthProvider>
             </Suspense>

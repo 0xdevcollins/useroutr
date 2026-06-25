@@ -1,0 +1,44 @@
+---
+title: "The managed wallet trap: why we shipped Approach A first"
+category: "Engineering"
+author: "Mira Adeoye"
+date: "2026-04-28"
+excerpt: "There's a Twitter-cohort version of building stablecoin infra that says 'always non-custodial.' The Stripe-cohort version says 'always frictionless.' We picked Stripe."
+readTime: "5 min"
+---
+
+There's a Twitter-cohort version of building stablecoin infra that says "always non-custodial." The Stripe-cohort version says "always frictionless." We picked Stripe.
+
+## The custody spectrum
+
+Self-custody: the merchant controls their own keys. Maximum sovereignty, maximum friction. To accept payments on Stellar, a merchant needs a funded Stellar account, a trustline for each asset they want to receive, and a way to manage their keys. None of that is hard for a developer who knows Stellar. All of it is a wall for a business owner who just wants to get paid.
+
+Managed wallets: we provision a Stellar account for the merchant, fund the base reserve, set up the trustlines, and manage the keys in a secure enclave. The merchant sees a dashboard. They don't see a seed phrase.
+
+Custodial: we hold the funds. The merchant has a balance on our platform, not on-chain. This is what most payment processors do. It's also what triggers money transmitter licensing.
+
+Useroutr's managed wallet model is in the middle: we manage the keys, but the funds are on-chain in the merchant's account. We can't spend them without the merchant's authorization. The merchant can export their keys and take custody at any time.
+
+## The merchant onboarding wall
+
+We prototyped a self-custody-first flow in early 2025. The onboarding sequence: create a Stellar account, fund it with XLM for the base reserve, add trustlines for USDC and EURC, connect your wallet to the Useroutr dashboard.
+
+We tested it with 12 prospective merchants. Three completed it. The other nine dropped off at "fund your account with XLM." None of them had XLM. None of them wanted to get XLM. They wanted to accept payments.
+
+The self-custody flow is correct in principle. It's a wall in practice.
+
+## What real businesses do
+
+Real businesses don't want to manage cryptographic keys. They want to accept payments, see a balance, and withdraw to their bank account. The key management question is interesting to us; it's a distraction to them.
+
+This isn't a failure of education. It's a correct prioritization. A restaurant owner who wants to accept USDC from international customers is not going to become a Stellar developer to do it. If we require that, we lose the customer.
+
+## Our compromise
+
+Approach A: managed wallets by default. Every merchant who signs up gets a Stellar account provisioned automatically. They can take payments immediately. The keys are in our secure enclave, the funds are on-chain in their account.
+
+The upgrade path is real and documented: merchants can export their keys and take self-custody at any time. We're building passkey-derived key management as an opt-in for merchants who want self-custody without the seed phrase UX. BYO wallet is always available for merchants who already have Stellar accounts.
+
+The marketing copy adjustment: we don't say "non-custodial" without qualification. We say "settlement on-chain, managed wallets out of the box." That's accurate. The funds are on-chain. We manage the keys. Merchants who care about the distinction can read the docs and make an informed choice.
+
+The Twitter-cohort will say we compromised. The Stripe-cohort will say we shipped.

@@ -1,6 +1,5 @@
 import { MetadataRoute } from "next";
-import { BLOG_POSTS } from "@/lib/blog-posts";
-import { PRODUCT_PAGES } from "@/lib/product-pages";
+import { getAllPosts } from "@/lib/blog";
 
 const baseUrl = "https://useroutr.com";
 
@@ -34,8 +33,16 @@ const staticRoutes = [
   "/compliance",
 ];
 
+const productPages = [
+  "hosted-checkout",
+  "pay-by-link",
+  "invoicing",
+  "payouts",
+];
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
+  const posts = getAllPosts();
 
   return [
     {
@@ -50,11 +57,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly" as const,
       priority: route === "/pricing" || route === "/products" ? 0.9 : 0.7,
     })),
-    ...PRODUCT_PAGES.map((product) => ({
-      url: `${baseUrl}/products/${product.slug}`,
+    ...productPages.map((slug) => ({
+      url: `${baseUrl}/products/${slug}`,
       lastModified: now,
       changeFrequency: "monthly" as const,
-      priority: 0.8,
+      priority: 0.85,
     })),
     ...useCases.map((slug) => ({
       url: `${baseUrl}/use-cases/${slug}`,
@@ -74,11 +81,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
-    ...BLOG_POSTS.map((post) => ({
-      url: `${baseUrl}${post.canonicalPath}`,
-      lastModified: new Date(post.publishedAt),
+    ...posts.map((post) => ({
+      url: `${baseUrl}/blog/${post.slug}`,
+      lastModified: new Date(post.date),
       changeFrequency: "monthly" as const,
-      priority: 0.75,
+      priority: 0.7,
     })),
   ];
 }

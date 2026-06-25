@@ -1,91 +1,90 @@
-import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { PageShell } from "@/components/site/PageShell";
-import { PageEnter } from "@/components/site/PageEnter";
-import { PageMast } from "@/components/v2/PageMast";
-import { PRODUCT_PAGES } from "@/lib/product-pages";
+import type { Metadata } from "next";
+
+const products = [
+  {
+    label: "Hosted checkout",
+    description: "Stripe-style branded checkout. USDC + card + bank, one URL.",
+    href: "/products/hosted-checkout",
+  },
+  {
+    label: "Pay by link",
+    description: "One-link payment requests. No code, no checkout to build.",
+    href: "/products/pay-by-link",
+  },
+  {
+    label: "Invoicing",
+    description: "Send a PDF invoice, get paid in USDC or fiat.",
+    href: "/products/invoicing",
+  },
+  {
+    label: "Global payouts",
+    description: "Bulk disbursements to 174 countries.",
+    href: "/products/payouts",
+  },
+];
 
 export const metadata: Metadata = {
   title: "Products — Useroutr",
   description:
-    "Explore Useroutr products for checkout, payment links, invoicing, and global payouts.",
+    "One engine. Four ways to use it. Accept, route, settle, and notify — pick the surface that fits your business.",
   alternates: { canonical: "/products" },
 };
 
 export default function ProductsIndexPage() {
   return (
     <PageShell>
-      <PageEnter>
-        <PageMast
-          eyebrow="Products"
-          title={
-            <>
-              Four products. <span className="editorial-italic text-ink-2">One API.</span>
-            </>
-          }
-          description="Each module is standalone, but they share one ledger, one webhook contract, and one reconciliation model. Start with one and add the rest without replatforming."
-        />
+      <div className="min-h-screen bg-black text-white">
+        {/* Hero */}
+        <section className="pt-40 pb-20 px-6 max-w-5xl mx-auto">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-500 mb-6">
+            Products
+          </p>
+          <h1 className="font-display text-5xl md:text-7xl font-bold italic tracking-tighter text-white leading-[1.0]">
+            One engine.
+            <br />
+            Four ways to use it.
+          </h1>
+          <p className="mt-8 max-w-xl text-lg text-zinc-400 leading-relaxed font-light">
+            The same primitives — accept, route, settle, notify — power every
+            product on Useroutr. Pick the surface that fits your business.
+          </p>
+        </section>
 
-        <section className="border-t border-rule py-20 md:py-28">
-          <div className="container-x">
-            <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-5 md:grid-cols-2">
-              {PRODUCT_PAGES.map((product) => (
-                <article
-                  key={product.slug}
-                  className="flex h-full flex-col rounded-3xl border border-rule bg-bg-card p-7 md:p-8"
-                >
-                  <span
-                    className="text-[11px] uppercase tracking-[0.16em] text-ink-3"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                  >
-                    {product.category}
-                  </span>
-                  <h2
-                    className="mt-3 text-[28px] leading-[1.08] tracking-[-0.03em] text-ink md:text-[36px]"
-                    style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
-                  >
-                    {product.name}
-                  </h2>
-                  <p className="mt-4 text-[15px] leading-relaxed text-ink-2 md:text-[16px]">
-                    {product.summary}
+        {/* Product cards */}
+        <section className="pb-32 px-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {products.map((p) => (
+              <Link
+                key={p.href}
+                href={p.href}
+                className="group relative flex flex-col justify-between p-8 rounded-2xl border border-white/8 bg-white/2 hover:bg-white/5 hover:border-white/15 transition-all duration-200"
+              >
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-600 mb-3">
+                    Useroutr
                   </p>
-
-                  <ul className="mt-6 space-y-2.5">
-                    {product.bullets.slice(0, 3).map((point) => (
-                      <li key={point} className="flex items-start gap-2.5 text-[14px] text-ink-2">
-                        <span className="mt-1 size-1.5 shrink-0 rounded-full bg-accent" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="mt-8 flex items-center gap-4">
-                    <Link href={`/products/${product.slug}`} className="magnet">
-                      <span className="pill pill-dark py-2.5 text-[13px]">
-                        View product
-                        <ArrowRight className="size-4" strokeWidth={1.6} />
-                      </span>
-                    </Link>
-                    <Link
-                      href={product.primaryCta.href}
-                      target={product.primaryCta.href.startsWith("http") ? "_blank" : undefined}
-                      rel={product.primaryCta.href.startsWith("http") ? "noreferrer" : undefined}
-                      className="group inline-flex items-center gap-1 text-[14px] text-ink-2 transition-colors hover:text-ink"
-                    >
-                      <span className="link-underline">{product.primaryCta.label}</span>
-                      <ArrowUpRight
-                        className="size-3.5 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                        strokeWidth={1.6}
-                      />
-                    </Link>
-                  </div>
-                </article>
-              ))}
-            </div>
+                  <h2 className="font-display text-2xl font-bold text-white tracking-tight">
+                    {p.label}
+                  </h2>
+                  <p className="mt-3 text-[15px] text-zinc-400 leading-relaxed">
+                    {p.description}
+                  </p>
+                </div>
+                <div className="mt-8 flex items-center gap-2 text-zinc-500 group-hover:text-white transition-colors text-sm font-mono uppercase tracking-widest">
+                  <span>Learn more</span>
+                  <ArrowRight
+                    size={14}
+                    className="group-hover:translate-x-1 transition-transform"
+                  />
+                </div>
+              </Link>
+            ))}
           </div>
         </section>
-      </PageEnter>
+      </div>
     </PageShell>
   );
 }
