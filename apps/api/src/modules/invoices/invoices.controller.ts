@@ -36,7 +36,8 @@ const TRACKING_PIXEL = Buffer.from(
   'base64',
 );
 
-@Controller('v1/invoices')
+// Global `/v1` prefix is set in main.ts — controller routes are relative.
+@Controller('invoices')
 @UseGuards(CombinedAuthGuard)
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}

@@ -30,22 +30,24 @@ export function SearchInput({
   return (
     <div className="relative flex-1">
       <MagnifyingGlass
-        size={18}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        size={16}
+        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-faint"
       />
       <input
         type="text"
         placeholder={placeholder}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        className="h-10 w-full rounded-sm border border-input bg-transparent pl-10 pr-10 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+        className="h-11 w-full rounded-lg border border-border bg-card pl-10 pr-10 text-[14px] text-foreground placeholder:text-text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
       />
       {query && (
         <button
+          type="button"
           onClick={() => setQuery("")}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          aria-label="Clear search"
+          className="absolute right-3 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-text-faint transition-colors hover:bg-secondary hover:text-foreground"
         >
-          <X size={18} />
+          <X size={14} />
         </button>
       )}
     </div>

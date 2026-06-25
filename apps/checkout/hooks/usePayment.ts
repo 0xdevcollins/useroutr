@@ -2,6 +2,22 @@ import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { api } from "@/lib/api";
 
+export type PaymentMethod = "card" | "bank" | "crypto";
+
+interface PaymentMerchant {
+  name?: string;
+  logo?: string;
+}
+
+interface PaymentMetadata {
+  description?: string;
+  orderId?: string;
+  redirect_url?: string;
+  return_url?: string;
+  receipt_email?: string;
+  [key: string]: unknown;
+}
+
 interface Payment {
   id: string;
   amount: number;
@@ -12,6 +28,9 @@ interface Payment {
   description?: string;
   lineItems?: { label: string; amount: number }[];
   expiresAt?: string;
+  paymentMethods?: PaymentMethod[];
+  merchant?: PaymentMerchant;
+  metadata?: PaymentMetadata;
 }
 
 export function usePayment(paymentId: string) {

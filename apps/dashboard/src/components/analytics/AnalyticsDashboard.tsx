@@ -111,9 +111,9 @@ const PERIOD_OPTIONS: Array<{ value: Period; label: string }> = [
 ];
 
 const PAYMENT_COLORS: Record<PaymentMethod, string> = {
-  card: "#3b82f6",
-  crypto: "#14b8a6",
-  bank: "#f59e0b",
+  card: "var(--blue)",
+  crypto: "var(--teal)",
+  bank: "var(--amber)",
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -782,7 +782,7 @@ function RevenueChart({
                 x2={width}
                 y1={y}
                 y2={y}
-                stroke="rgba(148,163,184,0.22)"
+                stroke="var(--chart-grid)"
                 strokeDasharray="4 6"
               />
             );
@@ -806,7 +806,7 @@ function RevenueChart({
                   width={barWidth}
                   height={barHeight}
                   rx={8}
-                  fill={active ? "#1d4ed8" : "#3b82f6"}
+                  fill={active ? "var(--blue)" : "var(--blue2)"}
                   opacity={active ? 1 : 0.82}
                 />
                 <text
@@ -814,7 +814,7 @@ function RevenueChart({
                   y={height - 18}
                   textAnchor="middle"
                   fontSize="11"
-                  fill="rgba(100,116,139,1)"
+                  fill="var(--chart-tick)"
                 >
                   {point.label}
                 </text>
@@ -826,13 +826,13 @@ function RevenueChart({
                       width={106}
                       height={30}
                       rx={10}
-                      fill="rgba(15,23,42,0.95)"
+                      fill="var(--chart-tooltip-bg)"
                     />
                     <text
                       x={Math.max(18, x - 18)}
                       y={Math.max(28, y - 18)}
                       fontSize="11"
-                      fill="#ffffff"
+                      fill="var(--chart-tooltip-text)"
                     >
                       {formatCompactMoney(point.amount)}
                     </text>
@@ -880,7 +880,7 @@ function PaymentMethodCard({
               cy="70"
               r={radius}
               fill="none"
-              stroke="rgba(148,163,184,0.18)"
+              stroke="var(--chart-grid)"
               strokeWidth="20"
             />
             {segments.map((segment) => {
@@ -983,8 +983,8 @@ function ConversionCard({
         >
           <defs>
             <linearGradient id="conversion-fill-dashboard" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(20,184,166,0.35)" />
-              <stop offset="100%" stopColor="rgba(20,184,166,0.02)" />
+              <stop offset="0%" stopColor="var(--teal)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--teal)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <path
@@ -994,7 +994,7 @@ function ConversionCard({
           <path
             d={path}
             fill="none"
-            stroke="#14b8a6"
+            stroke="var(--teal)"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -1058,7 +1058,7 @@ function FailureHeatmap({
   const maxCount = Math.max(...byHour.map((cell) => cell.count), 1);
   const getColor = (count: number) => {
     const alpha = count / maxCount;
-    return `rgba(239,68,68,${0.1 + alpha * 0.75})`;
+    return `color-mix(in srgb, var(--red) ${Math.round((0.1 + alpha * 0.75) * 100)}%, transparent)`;
   };
 
   return (
@@ -1298,44 +1298,53 @@ export default function AnalyticsDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
+    <div className="space-y-8 dashboard-enter">
+      {/* Editorial header — matches the rest of the dashboard */}
+      <motion.header
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 shadow-sm"
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-col gap-4 border-b border-rule pb-6 md:flex-row md:items-end md:justify-between md:gap-8"
       >
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h2 className="font-display text-xl font-semibold text-foreground">
-              Analytics
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Revenue over time, conversion rates, payment method mix, failure
-              patterns, and top currencies for merchants.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 xl:items-end">
-            <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
-              {headerSubtitle}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <DateRangePicker
-                range={range}
-                onChange={handleRangeChange}
-                onClear={handleClearRange}
-              />
-              <ExportButton
-                disabled={!snapshot}
-                onExport={() => downloadCsv(snapshot, period, range)}
-              />
-            </div>
-          </div>
+        <div className="min-w-0">
+          <span className="eyebrow">Analytics</span>
+          <h1
+            className="mt-3 text-[32px] leading-[1.05] tracking-[-0.035em] text-foreground md:text-[40px]"
+            style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
+          >
+            Revenue, conversion,{" "}
+            <span className="editorial-italic text-muted-foreground">
+              and the gaps.
+            </span>
+          </h1>
+          <p className="mt-2 max-w-2xl text-[14px] text-muted-foreground md:text-[15px]">
+            Revenue over time, conversion rates, payment method mix, failure
+            patterns, and top currencies — across all chains and rails.
+          </p>
         </div>
 
-        <SourceNotice note={note} />
-      </motion.div>
+        <div className="flex shrink-0 flex-col gap-3 md:items-end">
+          <div
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-[12px] text-muted-foreground"
+            style={{ fontFamily: "var(--font-mono)" }}
+          >
+            {headerSubtitle}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <DateRangePicker
+              range={range}
+              onChange={handleRangeChange}
+              onClear={handleClearRange}
+            />
+            <ExportButton
+              disabled={!snapshot}
+              onExport={() => downloadCsv(snapshot, period, range)}
+            />
+          </div>
+        </div>
+      </motion.header>
+
+      <SourceNotice note={note} />
 
       {isSnapshotEmpty(snapshot) ? (
         <EmptyState onReset={resetFilters} />

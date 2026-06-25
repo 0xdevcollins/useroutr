@@ -16,7 +16,9 @@ export interface RecentPayment {
   status: unknown;
   destAmount: unknown;
   destAsset: string;
-  sourceChain: string;
+  // Nullable since link-initiated payments may exist before the customer
+  // picks a source chain. Analytics widgets should label these as "—".
+  sourceChain: string | null;
   createdAt: Date;
   [key: string]: unknown;
 }

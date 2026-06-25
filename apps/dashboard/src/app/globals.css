@@ -1,3 +1,8 @@
+/*
+ * Useroutr Dashboard — extends the shared design system tokens from
+ * @useroutr/ui. Anything app-specific (header height, surfaces, animations)
+ * lives below.
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@useroutr/ui/globals.css";
@@ -50,9 +55,9 @@
   --color-purple: var(--purple);
 
   /* ── Font families ── */
-  --font-display: "Inter", "Trebuchet MS", sans-serif;
-  --font-body: "Open Sans", sans-serif;
-  --font-mono: "IBM Plex Mono", "JetBrains Mono", Menlo, monospace;
+  --font-display: var(--font-hanken), "Trebuchet MS", sans-serif;
+  --font-body: var(--font-hanken), sans-serif;
+  --font-mono: var(--font-jet-mono), "JetBrains Mono", Menlo, monospace;
 
   /* ── Radius ── */
   --radius-sm: var(--radius-sm);
@@ -70,25 +75,73 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-}
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
+  /* ── Dark mode page tokens ── */
+  --color-bg-page: var(--bg-page);
+  --color-bg-card: var(--bg-card);
+  --color-bg-sidebar: var(--bg-sidebar);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border-color: var(--border-color);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-code-bg: var(--code-bg);
 
-  body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-body);
-  }
+  /* ── Chart theming tokens ── */
+  --color-chart-tick: var(--chart-tick);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-tooltip-bg: var(--chart-tooltip-bg);
+  --color-chart-tooltip-text: var(--chart-tooltip-text);
 
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-display);
-  }
+  /* ── Status tokens ── */
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-text: var(--status-success-text);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-text: var(--status-warning-text);
+  --color-status-error-bg: var(--status-error-bg);
+  --color-status-error-text: var(--status-error-text);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-text: var(--status-info-text);
+  --color-status-purple-bg: var(--status-purple-bg);
+  --color-status-purple-text: var(--status-purple-text);
+  --color-status-amber-bg: var(--status-amber-bg);
+  --color-status-amber-text: var(--status-amber-text);
 }
 
 :root {
   --header-height: 3.5rem;
+
+  /* ── Dark mode specific tokens (dark-first) ── */
+  --bg-page: #0B1628;
+  --bg-card: #1A2332;
+  --bg-sidebar: #0F1D2E;
+  --text-primary: #F8F9FA;
+  --text-secondary: #6C757D;
+  --border-color: #2D3748;
+  --input-bg: #1A2332;
+  --input-border: #2D3748;
+  --code-bg: #0B1628;
+
+  /* ── Chart theming tokens ── */
+  --chart-tick: #F8F9FA;
+  --chart-grid: rgba(248, 249, 250, 0.08);
+  --chart-tooltip-bg: #1A2332;
+  --chart-tooltip-text: #F8F9FA;
+  --chart-tooltip-border: #2D3748;
+
+  /* ── Semantic status tokens ── */
+  --status-success-bg: rgba(34, 197, 94, 0.12);
+  --status-success-text: #4ade80;
+  --status-warning-bg: rgba(245, 158, 11, 0.12);
+  --status-warning-text: #fbbf24;
+  --status-error-bg: rgba(239, 68, 68, 0.12);
+  --status-error-text: #f87171;
+  --status-info-bg: rgba(59, 130, 246, 0.12);
+  --status-info-text: #60a5fa;
+  --status-purple-bg: rgba(168, 85, 247, 0.12);
+  --status-purple-text: #c084fc;
+  --status-amber-bg: rgba(245, 158, 11, 0.12);
+  --status-amber-text: #fbbf24;
 
   /* Sidebar uses Useroutr ink tiers for dark-first design */
   --sidebar: var(--ink2);
@@ -102,6 +155,35 @@
 }
 
 .light {
+  --bg-page: #FFFFFF;
+  --bg-card: #F8F9FA;
+  --bg-sidebar: #F3F4F6;
+  --text-primary: #1A202C;
+  --text-secondary: #6B7280;
+  --border-color: #E2E8F0;
+  --input-bg: #FFFFFF;
+  --input-border: #D1D5DB;
+  --code-bg: #F1F5F9;
+
+  --chart-tick: #1A202C;
+  --chart-grid: rgba(0, 0, 0, 0.08);
+  --chart-tooltip-bg: #FFFFFF;
+  --chart-tooltip-text: #1A202C;
+  --chart-tooltip-border: #E2E8F0;
+
+  --status-success-bg: rgba(34, 197, 94, 0.1);
+  --status-success-text: #16a34a;
+  --status-warning-bg: rgba(245, 158, 11, 0.1);
+  --status-warning-text: #d97706;
+  --status-error-bg: rgba(239, 68, 68, 0.1);
+  --status-error-text: #dc2626;
+  --status-info-bg: rgba(59, 130, 246, 0.1);
+  --status-info-text: #2563eb;
+  --status-purple-bg: rgba(168, 85, 247, 0.1);
+  --status-purple-text: #7c3aed;
+  --status-amber-bg: rgba(245, 158, 11, 0.1);
+  --status-amber-text: #d97706;
+
   --sidebar: oklch(0.975 0.003 265);
   --sidebar-foreground: oklch(0.15 0.01 265);
   --sidebar-primary: var(--blue);
@@ -113,69 +195,83 @@
 }
 
 .dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --sidebar: var(--bg-sidebar);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--blue);
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1E293B;
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-color);
+  --sidebar-ring: var(--blue2);
 }
 
-/* ── Modern card surface ── */
+@layer base {
+  body {
+    font-feature-settings: "ss01", "ss02";
+  }
+}
+
+/* ── Editorial card surface — used across dashboard widgets ──────────── */
 .surface {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-
 .surface:hover {
-  box-shadow: var(--shadow-md);
   border-color: var(--rule2);
+  box-shadow: var(--shadow-sm);
 }
 
-/* ── Glow accent for primary elements ── */
-.glow-primary {
-  box-shadow: 0 0 20px oklch(0.55 0.18 255 / 15%), var(--shadow-sm);
+/* ── Numeric / tabular numerals — for tables, balances, code ─────────── */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
-.glow-primary:hover {
-  box-shadow: 0 0 32px oklch(0.55 0.18 255 / 25%), var(--shadow-md);
+/* ── Hairline divider for tables / lists ─────────────────────────────── */
+.divide-hairline > * + * {
+  border-top: 1px solid var(--rule);
 }
 
-.light .glow-primary {
-  box-shadow: 0 0 24px oklch(0.55 0.18 255 / 10%), var(--shadow-sm);
+/* ── Fade-in for route content ───────────────────────────────────────── */
+.dashboard-enter {
+  animation: dashboard-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes dashboard-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.light .glow-primary:hover {
-  box-shadow: 0 0 36px oklch(0.55 0.18 255 / 18%), var(--shadow-md);
-}
-
-/* ── Gradient border accent ── */
-.gradient-border {
+/* ── Decorative accent rail ───────────────────────────────────────────── */
+.accent-rail {
   position: relative;
-  border: none;
-  background: var(--card);
-  border-radius: var(--radius-xl);
 }
-
-.gradient-border::before {
+.accent-rail::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, var(--blue) 0%, var(--teal) 50%, var(--purple) 100%);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  opacity: 0.4;
-  transition: opacity 0.3s ease;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 2px;
 }
 
-.gradient-border:hover::before {
-  opacity: 0.7;
+/* ── Gradient ring for premium / featured elements ───────────────────── */
+.gradient-ring {
+  position: relative;
+}
+.gradient-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--accent), var(--teal));
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }

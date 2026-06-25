@@ -35,8 +35,9 @@ function parseGranularity(raw?: string): Granularity {
   return value as Granularity;
 }
 
+// Global `/v1` prefix is set in main.ts — controller routes are relative.
 @UseGuards(JwtAuthGuard)
-@Controller('v1/analytics')
+@Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 

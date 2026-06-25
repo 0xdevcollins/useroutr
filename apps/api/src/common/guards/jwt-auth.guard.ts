@@ -38,7 +38,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         new UnauthorizedException({
           code: 'unauthorized',
           message: 'Invalid or missing JWT',
-          docs: 'https://docs.useroutr.io/errors/unauthorized',
+          docs: 'https://docs.useroutr.com/errors/unauthorized',
         })
       );
     }

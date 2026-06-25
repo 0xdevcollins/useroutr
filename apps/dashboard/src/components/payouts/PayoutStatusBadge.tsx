@@ -1,16 +1,13 @@
 "use client";
 
-import { Badge } from "@useroutr/ui";
+import { BrandStatusBadge, type Tone } from "@/components/brand/StatusBadge";
 import { type PayoutStatus } from "@/hooks/usePayouts";
 
 interface PayoutStatusBadgeProps {
   status: PayoutStatus;
 }
 
-const STATUS_VARIANTS: Record<
-  PayoutStatus,
-  "pending" | "processing" | "completed" | "failed" | "cancelled"
-> = {
+const STATUS_TONES: Record<PayoutStatus, Tone> = {
   PENDING: "pending",
   PROCESSING: "processing",
   COMPLETED: "completed",
@@ -27,8 +24,12 @@ const STATUS_LABELS: Record<PayoutStatus, string> = {
 };
 
 export function PayoutStatusBadge({ status }: PayoutStatusBadgeProps) {
-  const variant = STATUS_VARIANTS[status];
-  const label = STATUS_LABELS[status];
-
-  return <Badge variant={variant}>{label}</Badge>;
+  return (
+    <BrandStatusBadge
+      tone={STATUS_TONES[status]}
+      pulse={status === "PROCESSING"}
+    >
+      {STATUS_LABELS[status]}
+    </BrandStatusBadge>
+  );
 }

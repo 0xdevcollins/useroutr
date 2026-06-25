@@ -151,7 +151,7 @@ Useroutr uses a NestJS native monorepo. All code lives in one repository. Shared
 | │   │ |
 | │   ├── dashboard/                    \# Next.js 14 — merchant dashboard |
 | │   ├── checkout/                     \# Next.js 14 — hosted checkout (consumer) |
-| │   ├── www/                          \# Next.js 14 — marketing site useroutr.io |
+| │   ├── www/                          \# Next.js 14 — marketing site useroutr.com |
 | │   └── docs/                         \# Next.js 14 — documentation site |
 | │ |
 | ├── packages/ |
@@ -1222,14 +1222,14 @@ Never commit secrets to git. All environment variables are injected at runtime. 
 |   |
 | \# ── Email ───────────────────────────────────────────────────── |
 | RESEND\_API\_KEY="re\_..." |
-| EMAIL\_FROM="<payments@useroutr.io>" |
+| EMAIL\_FROM="<payments@useroutr.com>" |
 |   |
 | \# ── Storage ─────────────────────────────────────────────────── |
 | R2\_ACCOUNT\_ID="your-cloudflare-account-id" |
 | R2\_ACCESS\_KEY\_ID="your-r2-access-key" |
 | R2\_SECRET\_ACCESS\_KEY="your-r2-secret-key" |
 | R2\_BUCKET\_NAME="useroutr-files" |
-| R2\_PUBLIC\_URL="<https://files.useroutr.io>" |
+| R2\_PUBLIC\_URL="<https://files.useroutr.com>" |
 |   |
 | \# ── App ─────────────────────────────────────────────────────── |
 | PORT=3000 |
@@ -1315,7 +1315,7 @@ Build the Stellar module. This is the heart of Useroutr. Everything routes throu
 
 ## **Phase 7 — Merchant Tools (Weeks 13–14)**
 
-| 18 | Build Payment Links module Generate short shareable URLs that point to the hosted checkout. When a link is opened, the checkout pre-fills with the configured amount, currency, and description. bash \# Endpoints: \# POST   /v1/payment-links \# GET    /v1/payment-links \# GET    /v1/payment-links/:id \# DELETE /v1/payment-links/:id \# GET    /pay/:linkId  (public — hosted checkout)   \# Link format: <https://pay.useroutr.io/l/ABC123>  |
+| 18 | Build Payment Links module Generate short shareable URLs that point to the hosted checkout. When a link is opened, the checkout pre-fills with the configured amount, currency, and description. bash \# Endpoints: \# POST   /v1/payment-links \# GET    /v1/payment-links \# GET    /v1/payment-links/:id \# DELETE /v1/payment-links/:id \# GET    /pay/:linkId  (public — hosted checkout)   \# Link format: <https://pay.useroutr.com/l/ABC123>  |
 | :---: | :---- |
 
 | 19 | Build Invoicing module bash npm install puppeteer  \# or @react-pdf/renderer   \# Endpoints: \# POST   /v1/invoices \# GET    /v1/invoices \# GET    /v1/invoices/:id \# POST   /v1/invoices/:id/send \# POST   /v1/invoices/:id/mark-paid   \# PDF generation: \# Render invoice HTML template with Puppeteer \# Upload PDF to Cloudflare R2 \# Store R2 URL in invoice.pdfUrl \# Send PDF link via Resend email  |
@@ -1337,7 +1337,7 @@ Build the Stellar module. This is the heart of Useroutr. Everything routes throu
 | 23 | Security & Production readiness Do not skip this phase. These are not nice-to-haves — they are table stakes for a payment product. Rate limiting: 100 req/min per API key on all endpoints. 10 req/min on auth endpoints. Idempotency keys: All POST endpoints accept Idempotency-Key header. Duplicate requests return the same response. Webhook signature verification: HMAC-SHA256. Document the verification process for merchants. Input sanitization: All inputs validated with Zod. No raw user data in SQL queries (Prisma parameterizes automatically). Secrets audit: Verify no secrets in git history. Rotate all keys. Move to Railway env vars. Sentry integration: Error tracking on both API and frontend. Set up alerts for payment failures. Smart contract audit: Engage OtterSec, Halborn, or Trail of Bits. Budget $15k–$40k. Non-negotiable before mainnet. |
 | :---: | :---- |
 
-| 24 | Deploy to Railway (Staging) bash \# Railway CLI npm install \-g @railway/cli railway login railway new   \# Add services railway add \--plugin postgresql railway add \--plugin redis   \# Deploy API railway up   \# Add all environment variables via Railway dashboard \# Set up custom domains: \#   api.useroutr.io      → Railway API service \#   dashboard.useroutr.io → Railway dashboard service \#   checkout.useroutr.io  → Railway checkout service   \# Set up Cloudflare as proxy in front of all domains  |
+| 24 | Deploy to Railway (Staging) bash \# Railway CLI npm install \-g @railway/cli railway login railway new   \# Add services railway add \--plugin postgresql railway add \--plugin redis   \# Deploy API railway up   \# Add all environment variables via Railway dashboard \# Set up custom domains: \#   api.useroutr.com      → Railway API service \#   dashboard.useroutr.com → Railway dashboard service \#   checkout.useroutr.com  → Railway checkout service   \# Set up Cloudflare as proxy in front of all domains  |
 | :---: | :---- |
 
 ## **Phase 10 — Launch (Weeks 19–20)**
@@ -1500,5 +1500,5 @@ Payment infrastructure requires a higher testing bar than a typical SaaS. A bug 
 | Polygon Amoy | faucet.polygon.technology |
 | Solana Devnet | solfaucet.com |
 
-| Build it like it's infrastructure. *Pay anything. Settle everywhere.* useroutr.io  ·  docs.useroutr.io  ·  A product of thirtn.com |
+| Build it like it's infrastructure. *Pay anything. Settle everywhere.* useroutr.com  ·  docs.useroutr.com  ·  A product of thirtn.com |
 | :---: |

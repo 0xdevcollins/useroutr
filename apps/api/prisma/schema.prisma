@@ -19,6 +19,11 @@ model Merchant {
   name              String
   email             String         @unique
   passwordHash      String
+  emailVerifiedAt   DateTime?
+  verificationCodeHash      String?
+  verificationCodeExpiresAt DateTime?
+  passwordResetTokenHash    String?
+  passwordResetExpiresAt    DateTime?
   apiKeyHash        String?        @unique // deprecated – use ApiKey model
   webhookUrl        String?
   webhookSecret     String?
@@ -41,6 +46,7 @@ model Merchant {
   teamMembers       TeamMember[]
   webhookEvents     WebhookEvent[]
   apiKeys           ApiKey[]
+  settlementKey     MerchantSettlementKey?
 }
 
 model ApiKey {
@@ -68,6 +74,29 @@ model TeamMember {
   email      String
   role       TeamRole
   merchant   Merchant @relation(fields: [merchantId], references: [id])
+}
+
+/// Managed Stellar settlement wallet provisioned at merchant signup. The
+/// encrypted seed lives in its own table so the merchant row stays
+/// safe to log/SELECT * without leaking private key material. AES-256-GCM
+/// keyed off `SETTLEMENT_KEY_KEK` env (per-row IV + authTag).
+///
+/// `managed=true`: Useroutr holds the encrypted seed (Approach A).
+/// `managed=false`: merchant has rotated to self-custody (passkey or
+/// bring-your-own); we keep the row for the audit trail but the seed
+/// fields may be NULL.
+model MerchantSettlementKey {
+  id              String    @id @default(cuid())
+  merchantId      String    @unique
+  stellarAddress  String    @unique
+  encryptedSeed   String?
+  iv              String?
+  authTag         String?
+  managed         Boolean   @default(true)
+  rotatedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  merchant        Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 }
 
 enum KybStatus {
@@ -99,7 +128,7 @@ model Quote {
   feeBps      Int
   feeAmount   Decimal  @db.Decimal(36, 18)
   stellarPath Json? // path payment hops
-  bridgeRoute String? // "cctp" | "wormhole" | "layerswap"
+  bridgeRoute String? // "cctp_v2" (primary) | "cctp" | "wormhole" | "layerswap" (legacy — drops in PR D)
   lockedAt    DateTime @default(now())
   expiresAt   DateTime // lockedAt + 30s
   used        Boolean  @default(false)
@@ -109,45 +138,48 @@ model Quote {
 // ── Payments ─────────────────────────────────────────────────
 
 model Payment {
-  id             String         @id @default(cuid())
-  merchantId     String
-  quoteId        String         @unique
-  status         PaymentStatus  @default(PENDING)
-  // Source side
-  sourceChain    String
-  sourceAsset    String
-  sourceAmount   Decimal        @db.Decimal(36, 18)
-  sourceAddress  String? // payer wallet address
-  sourceLockId   String? // HTLC lock ID on source chain
-  sourceTxHash   String?
-  // Settlement side
-  stellarLockId  String? // Soroban HTLC lock ID
-  stellarTxHash  String?
-  // Destination side
-  destChain      String
-  destAsset      String
-  destAmount     Decimal        @db.Decimal(36, 18)
-  destAddress    String // merchant receiving address
-  destTxHash     String?
-  // HTLC fields
-  hashlock       String? // sha256 of secret
-  htlcSecret     String? // encrypted secret
-  secretRevealed Boolean        @default(false)
+  id              String         @id @default(cuid())
+  merchantId      String
+  // Nullable: link-initiated payments don't have a quote until the customer
+  // picks a payment method on the checkout page. SDK-initiated payments
+  // (merchant brings a quote via /v1/payments) always have one.
+  quoteId         String?        @unique
+  status          PaymentStatus  @default(PENDING)
+  // Source side — nullable for link-initiated payments before method choice.
+  sourceChain     String?
+  sourceAsset     String?
+  sourceAmount    Decimal?       @db.Decimal(36, 18)
+  sourceAddress   String? // payer wallet address
+  sourceTxHash    String?
+  // Settlement side (Stellar leg)
+  stellarTxHash   String?
+  // Destination side. `destAmount` is nullable so open-amount links can land
+  // a payment row before the customer enters an amount.
+  destChain       String
+  destAsset       String
+  destAmount      Decimal?       @db.Decimal(36, 18)
+  destAddress     String // merchant receiving address
+  destTxHash      String?
+  // CCTP V2 — Circle's Iris nonce extracted from the source-chain burn receipt
+  // + the attestation blob fetched from iris-api. Empty until the source tx
+  // confirms; populated by the cctp module before the destination mint.
+  cctpNonce       String?
+  cctpAttestation String?
   // Idempotency
-  idempotencyKey String?        @unique
+  idempotencyKey  String?        @unique
   // Metadata
-  metadata       Json?
-  linkId         String?
-  refundedAt     DateTime?
-  completedAt    DateTime?
-  expiresAt      DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  merchant       Merchant       @relation(fields: [merchantId], references: [id])
-  quote          Quote          @relation(fields: [quoteId], references: [id])
-  webhookEvents  WebhookEvent[]
-  paymentLink    PaymentLink?   @relation("LinkPayments", fields: [linkId], references: [id])
-  bankSession    BankSession?
+  metadata        Json?
+  linkId          String?
+  refundedAt      DateTime?
+  completedAt     DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  merchant        Merchant       @relation(fields: [merchantId], references: [id])
+  quote           Quote?         @relation(fields: [quoteId], references: [id])
+  webhookEvents   WebhookEvent[]
+  paymentLink     PaymentLink?   @relation("LinkPayments", fields: [linkId], references: [id])
+  bankSession     BankSession?
 }
 
 enum PaymentStatus {

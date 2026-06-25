@@ -9,7 +9,7 @@ describe('NotificationsService', () => {
   let service: NotificationsService;
   let queueMock: { add: jest.Mock };
 
-  const APP_URL = 'https://app.useroutr.io';
+  const APP_URL = 'https://app.useroutr.com';
 
   beforeEach(async () => {
     queueMock = {
@@ -72,7 +72,7 @@ describe('NotificationsService', () => {
           to: 'test@example.com',
           subject: 'Reset your password',
           html: expect.stringContaining(
-            `${APP_URL}/reset?token=reset-token`,
+            `${APP_URL}/reset-password?token=reset-token`,
           ) as string,
         }),
         expect.any(Object),
@@ -164,11 +164,12 @@ describe('NotificationsService', () => {
         currency: 'USD',
         dueDate: new Date('2026-04-15T00:00:00Z'),
       };
-      await service.sendInvoice(
-        'customer@example.com',
-        invoice,
-        'https://storage.example.com/invoice.pdf',
-      );
+      // Service takes a PDF Buffer and embeds it as base64 in the email
+      // attachment (so the renderer doesn't have to fetch a URL).
+      const pdfBuffer = Buffer.from('%PDF-1.4 mock invoice content', 'utf8');
+      const expectedBase64 = pdfBuffer.toString('base64');
+
+      await service.sendInvoice('customer@example.com', invoice, pdfBuffer);
 
       expect(queueMock.add).toHaveBeenCalledWith(
         'sendEmail',
@@ -179,7 +180,7 @@ describe('NotificationsService', () => {
           attachments: [
             {
               filename: 'invoice-inv_789.pdf',
-              path: 'https://storage.example.com/invoice.pdf',
+              content: expectedBase64,
             },
           ],
         }),

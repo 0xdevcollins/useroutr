@@ -7,6 +7,13 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard.js';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
+// MerchantSettlementService is provided directly here (rather than via
+// MerchantModule import) to avoid the circular dependency: MerchantModule
+// already imports AuthModule for the guards. The service only depends on
+// PrismaService + ConfigService, both globally available, so dropping it
+// in this provider list is safe.
+import { MerchantSettlementService } from '../merchant/merchant-settlement.service.js';
 
 @Module({
   imports: [
@@ -15,6 +22,7 @@ import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard.js';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '15m' },
     }),
+    NotificationsModule,
   ],
   providers: [
     AuthService,
@@ -22,6 +30,7 @@ import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard.js';
     JwtAuthGuard,
     ApiKeyGuard,
     CombinedAuthGuard,
+    MerchantSettlementService,
   ],
   controllers: [AuthController],
   exports: [AuthService, JwtAuthGuard, ApiKeyGuard, CombinedAuthGuard],

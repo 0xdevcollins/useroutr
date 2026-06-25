@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from '@nestjs-modules/ioredis';
 import { BullModule } from '@nestjs/bullmq';
@@ -14,15 +14,16 @@ import { PayoutsModule } from './modules/payouts/payouts.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { LinksModule } from './modules/links/links.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
-import { BridgeModule } from './modules/bridge/bridge.module';
 import { RampModule } from './modules/ramp/ramp.module';
-import { RelayModule } from './modules/relay/relay.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { HealthModule } from './modules/health/health.module';
+import { CctpModule } from './modules/cctp/cctp.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 
 @Module({
   imports: [
@@ -67,11 +68,11 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     InvoicesModule,
     LinksModule,
     WebhooksModule,
-    BridgeModule,
     RampModule,
-    RelayModule,
     NotificationsModule,
     AnalyticsModule,
+    HealthModule,
+    CctpModule,
   ],
   controllers: [AppController],
   providers: [
@@ -87,4 +88,13 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Stamp every incoming request with `req.id`. Wired here (rather than in
+   * main.ts) so it sits inside the Nest DI graph and any future
+   * middleware in this stack can resolve services normally.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

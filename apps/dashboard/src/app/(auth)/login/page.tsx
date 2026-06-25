@@ -1,11 +1,32 @@
+import Link from "next/link";
 import { LoginForm } from "@/components/login-form";
+import { AuthScaffold } from "@/components/brand/AuthScaffold";
+
+export const metadata = {
+  title: "Sign in",
+};
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <LoginForm />
-      </div>
-    </div>
+    <AuthScaffold
+      illustration="login"
+      eyebrow="Sign in"
+      title={
+        <>
+          Welcome <span className="editorial-italic">back.</span>
+        </>
+      }
+      description="Sign in to your Useroutr workspace to manage payments, invoices, and payouts."
+      footnote={
+        <span>
+          New here?{" "}
+          <Link href="/register" className="link-underline text-foreground">
+            Open an account
+          </Link>
+        </span>
+      }
+    >
+      <LoginForm />
+    </AuthScaffold>
   );
 }

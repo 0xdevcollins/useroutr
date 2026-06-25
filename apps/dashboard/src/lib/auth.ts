@@ -2,7 +2,14 @@ const TOKEN_KEY = "useroutr-token";
 const REFRESH_KEY = "useroutr-refresh-token";
 const VERIFICATION_EMAIL_KEY = "useroutr-verification-email";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+// Origin only (no path) — we append `/v1` ourselves so this file stays
+// in sync with lib/api.ts's BASE_URL construction. Fallback is the local
+// API port (:3333), NOT the marketing site (:3000) — getting that wrong
+// makes every refresh hit a 404 and silently log the user out.
+const API_ORIGIN = (
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333"
+).replace(/\/$/, "");
+const BASE_URL = `${API_ORIGIN}/v1`;
 
 interface JwtPayload {
   exp?: number;
@@ -112,12 +119,23 @@ export async function refreshAccessToken(): Promise<string | null> {
       return null;
     }
 
-    const data = (await res.json()) as {
-      accessToken: string;
+    // The API wraps successful responses in `{ data: ... }` via its
+    // TransformInterceptor. Unwrap before pulling the tokens — otherwise
+    // `data.accessToken` is undefined and `setTokens(undefined, ...)`
+    // corrupts the token store, which then triggers "Session expired"
+    // on the very next request.
+    const body = (await res.json()) as {
+      data?: { accessToken: string; refreshToken?: string };
+      accessToken?: string;
       refreshToken?: string;
     };
-    setTokens(data.accessToken, data.refreshToken);
-    return data.accessToken;
+    const payload = body.data ?? body;
+    if (!payload.accessToken) {
+      clearTokens();
+      return null;
+    }
+    setTokens(payload.accessToken, payload.refreshToken);
+    return payload.accessToken;
   } catch {
     clearTokens();
     return null;

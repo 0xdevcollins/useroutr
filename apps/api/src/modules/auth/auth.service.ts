@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   ConflictException,
   UnauthorizedException,
   BadRequestException,
@@ -10,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type { Merchant } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { MerchantSettlementService } from '../merchant/merchant-settlement.service.js';
 import type { RegisterDto } from './dto/register.dto.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { JwtPayload } from './strategies/jwt.strategy.js';
@@ -17,6 +20,8 @@ import type { JwtPayload } from './strategies/jwt.strategy.js';
 const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
+const VERIFICATION_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export interface AuthTokens {
   accessToken: string;
@@ -49,9 +54,13 @@ export interface ApiKeyListItem {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly notifications: NotificationsService,
+    private readonly settlement: MerchantSettlementService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -65,18 +74,43 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
+    const { code, hash, expiresAt } = await this.createVerificationCode();
+
     const merchant = await this.prisma.merchant.create({
       data: {
         name: dto.companyName || dto.name,
         email: dto.email,
         passwordHash,
+        verificationCodeHash: hash,
+        verificationCodeExpiresAt: expiresAt,
       },
     });
+
+    // Auto-provision a managed Stellar settlement wallet (Approach A).
+    // Wrapped in try/catch so a Stellar / Horizon outage doesn't block
+    // registration — the dashboard surfaces a "Provision settlement"
+    // CTA the merchant can click to retry, and PR 7.9b adds the manual
+    // endpoint for that retry.
+    try {
+      await this.settlement.provision(merchant.id);
+    } catch (err) {
+      this.logger.warn(
+        `Settlement provisioning failed for ${merchant.id} at register; merchant can retry from dashboard. (${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
+
+    // Re-fetch so the response carries the settlement fields the provision
+    // call just wrote to the merchant row.
+    const updated = await this.prisma.merchant.findUnique({
+      where: { id: merchant.id },
+    });
+
+    await this.dispatchVerificationEmail(merchant.email, code);
 
     const tokens = await this.generateTokens(merchant.id, merchant.email);
 
     return {
-      merchant: this.sanitizeMerchant(merchant),
+      merchant: this.sanitizeMerchant(updated ?? merchant),
       ...tokens,
     };
   }
@@ -249,6 +283,156 @@ export class AuthService {
     throw new UnauthorizedException('Invalid API key');
   }
 
+  // ── Email verification ──────────────────────────────────────────
+
+  async resendVerification(email: string): Promise<void> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { email },
+    });
+
+    // Silently succeed for unknown / already-verified accounts to prevent enumeration
+    if (!merchant || merchant.emailVerifiedAt) {
+      return;
+    }
+
+    const { code, hash, expiresAt } = await this.createVerificationCode();
+
+    await this.prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        verificationCodeHash: hash,
+        verificationCodeExpiresAt: expiresAt,
+      },
+    });
+
+    await this.dispatchVerificationEmail(merchant.email, code);
+  }
+
+  async verifyEmail(email: string, code: string): Promise<SafeMerchant> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { email },
+    });
+
+    if (!merchant) {
+      throw new BadRequestException('Invalid or expired code');
+    }
+
+    if (merchant.emailVerifiedAt) {
+      return this.sanitizeMerchant(merchant);
+    }
+
+    if (
+      !merchant.verificationCodeHash ||
+      !merchant.verificationCodeExpiresAt ||
+      merchant.verificationCodeExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Invalid or expired code');
+    }
+
+    const ok = await bcrypt.compare(code, merchant.verificationCodeHash);
+    if (!ok) {
+      throw new BadRequestException('Invalid or expired code');
+    }
+
+    const updated = await this.prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        emailVerifiedAt: new Date(),
+        verificationCodeHash: null,
+        verificationCodeExpiresAt: null,
+      },
+    });
+
+    return this.sanitizeMerchant(updated);
+  }
+
+  // ── Password reset ──────────────────────────────────────────────
+
+  async forgotPassword(email: string): Promise<void> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { email },
+    });
+
+    // Always return success to avoid email enumeration
+    if (!merchant) {
+      return;
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(rawToken, BCRYPT_ROUNDS);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+
+    await this.prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: expiresAt,
+      },
+    });
+
+    // Embed merchant id in the token so we can locate the row by primary key
+    // without scanning every merchant on reset.
+    const externalToken = `${merchant.id}.${rawToken}`;
+
+    try {
+      await this.notifications.sendPasswordResetEmail(
+        merchant.email,
+        externalToken,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to enqueue password reset email for ${merchant.email}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const [merchantId, rawToken] = token.split('.');
+    if (!merchantId || !rawToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+    });
+
+    if (
+      !merchant ||
+      !merchant.passwordResetTokenHash ||
+      !merchant.passwordResetExpiresAt ||
+      merchant.passwordResetExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const ok = await bcrypt.compare(rawToken, merchant.passwordResetTokenHash);
+    if (!ok) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+    await this.prisma.merchant.update({
+      where: { id: merchant.id },
+      data: {
+        passwordHash,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      },
+    });
+  }
+
+  // ── Logout ──────────────────────────────────────────────────────
+
+  // With stateless JWTs the server has nothing to invalidate. The endpoint
+  // exists so clients can hook in observability and (future) refresh-token
+  // revocation without an API change.
+  async logout(_merchantId: string): Promise<void> {
+    return;
+  }
+
   // ── Profile ─────────────────────────────────────────────────────
 
   async getProfile(merchantId: string): Promise<SafeMerchant> {
@@ -295,5 +479,32 @@ export class AuthService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, apiKeyHash, ...safe } = merchant;
     return safe;
+  }
+
+  private async createVerificationCode(): Promise<{
+    code: string;
+    hash: string;
+    expiresAt: Date;
+  }> {
+    const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+    const hash = await bcrypt.hash(code, BCRYPT_ROUNDS);
+    const expiresAt = new Date(Date.now() + VERIFICATION_CODE_TTL_MS);
+    return { code, hash, expiresAt };
+  }
+
+  private async dispatchVerificationEmail(
+    email: string,
+    code: string,
+  ): Promise<void> {
+    try {
+      await this.notifications.sendVerificationCodeEmail(email, code);
+    } catch (err) {
+      // Don't fail registration / resend just because the queue is unavailable.
+      this.logger.warn(
+        `Failed to enqueue verification email for ${email}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 }

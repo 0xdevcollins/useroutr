@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Plus, Search, Download, X, ChevronDown } from "lucide-react";
 import { Button, useToast } from "@useroutr/ui";
+import { PageHeader } from "@/components/brand/PageHeader";
 import { InvoiceDrawer } from "@/components/invoices/InvoiceDrawer";
 import { InvoicesTable } from "@/components/invoices/InvoicesTable";
 import { InvoiceDetailSheet } from "@/components/invoices/InvoiceDetailSheet";
@@ -285,28 +286,40 @@ export default function InvoicesPage() {
     createInvoice.isPending || updateInvoice.isPending || sendInvoice.isPending;
 
   return (
-    <div className="space-y-6">
-      {/* ── Header ── */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="font-display text-xl font-semibold text-foreground">Invoices</h2>
-          {meta && (
-            <p className="text-sm text-muted-foreground">
-              {meta.total} invoice{meta.total !== 1 ? "s" : ""}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={invoices.length === 0}>
-            <Download className="mr-1.5 h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button onClick={openCreate}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Create invoice
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-8 dashboard-enter">
+      <PageHeader
+        eyebrow="Invoicing"
+        title={
+          <>
+            Invoices that{" "}
+            <span className="editorial-italic text-muted-foreground">
+              chase themselves.
+            </span>
+          </>
+        }
+        description={
+          meta
+            ? `${meta.total.toLocaleString()} invoice${meta.total !== 1 ? "s" : ""} — draft, sent, and paid.`
+            : "Send branded invoices with auto-reminders. Lifecycle tracked from draft → sent → paid."
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={invoices.length === 0}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Create invoice
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Filters ── */}
       <div className="space-y-3">

@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { usePayments, type PaymentStatus, type Payment } from "@/hooks/usePayments";
+import {
+  usePayments,
+  type PaymentStatus,
+  type Payment,
+} from "@/hooks/usePayments";
 import { DataTable, type Column } from "@useroutr/ui";
 
 type PaymentWithIndex = Payment & Record<string, unknown>;
@@ -13,22 +17,24 @@ import { FilterBar } from "@/components/payments/FilterBar";
 import { PaymentDetailDrawer } from "@/components/payments/PaymentDetailDrawer";
 import { ExportButton } from "@/components/payments/ExportButton";
 import { formatCurrency } from "@/lib/utils";
+import { PageHeader } from "@/components/brand/PageHeader";
+import { EmptyState } from "@/components/brand/EmptyState";
 
 export default function PaymentsPage() {
   const searchParams = useSearchParams();
-  
+
   // State for filtering and pagination
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [limit, setLimit] = useState(Number(searchParams.get("limit")) || 10);
   const [status, setStatus] = useState<PaymentStatus | string>(
-    searchParams.get("status") || ""
+    searchParams.get("status") || "",
   );
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [selectedChain, setSelectedChain] = useState(
-    searchParams.get("chain") || ""
+    searchParams.get("chain") || "",
   );
   const [selectedCurrency, setSelectedCurrency] = useState(
-    searchParams.get("currency") || ""
+    searchParams.get("currency") || "",
   );
   const [sortColumn, setSortColumn] = useState("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -60,7 +66,7 @@ export default function PaymentsPage() {
       newStatus: string = status,
       newSearch: string = search,
       newChain: string = selectedChain,
-      newCurrency: string = selectedCurrency
+      newCurrency: string = selectedCurrency,
     ) => {
       const params = new URLSearchParams();
       if (newPage > 1) params.set("page", String(newPage));
@@ -74,7 +80,7 @@ export default function PaymentsPage() {
       const newUrl = queryString ? `?${queryString}` : "";
       window.history.replaceState(null, "", newUrl);
     },
-    [page, limit, status, search, selectedChain, selectedCurrency]
+    [page, limit, status, search, selectedChain, selectedCurrency],
   );
 
   // Handle filter changes
@@ -120,9 +126,7 @@ export default function PaymentsPage() {
         header: "ID",
         sortable: true,
         render: (payment) => (
-          <span className="font-mono text-xs">
-            {payment.id.slice(0, 8)}...
-          </span>
+          <span className="font-mono text-xs">{payment.id.slice(0, 8)}...</span>
         ),
       },
       {
@@ -142,15 +146,13 @@ export default function PaymentsPage() {
         key: "sourceChain",
         header: "Source",
         sortable: false,
-        render: (payment) =>
-          `${payment.sourceAsset} on ${payment.sourceChain}`,
+        render: (payment) => `${payment.sourceAsset} on ${payment.sourceChain}`,
       },
       {
         key: "destChain",
         header: "Destination",
         sortable: false,
-        render: (payment) =>
-          `${payment.destAsset} on ${payment.destChain}`,
+        render: (payment) => `${payment.destAsset} on ${payment.destChain}`,
       },
       {
         key: "createdAt",
@@ -166,23 +168,31 @@ export default function PaymentsPage() {
           }),
       },
     ],
-    []
+    [],
   );
 
+  const hasFilters = !!(status || search || selectedChain || selectedCurrency);
+  const showEmptyState = !isLoading && payments.length === 0 && !hasFilters;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-display text-xl font-semibold text-foreground">
-            Payments
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {totalPayments} total transactions
-          </p>
-        </div>
-        <ExportButton payments={payments} isLoading={isLoading} />
-      </div>
+    <div className="space-y-8 dashboard-enter">
+      <PageHeader
+        eyebrow="Payments"
+        title={
+          <>
+            Every transaction,{" "}
+            <span className="editorial-italic text-muted-foreground">
+              in one place.
+            </span>
+          </>
+        }
+        description={
+          totalPayments > 0
+            ? `${totalPayments.toLocaleString()} transactions across all chains and currencies.`
+            : "Once a customer completes a checkout, every transaction lands here."
+        }
+        actions={<ExportButton payments={payments} isLoading={isLoading} />}
+      />
 
       {/* Search and Filters */}
       <div className="flex flex-col gap-4">
@@ -197,18 +207,30 @@ export default function PaymentsPage() {
         />
       </div>
 
-      {/* Table */}
-      <DataTable<PaymentWithIndex>
-        columns={columns}
-        data={payments as PaymentWithIndex[]}
-        isLoading={isLoading}
-        loadingRows={limit}
-        emptyMessage="No payments found"
-        onRowClick={handleRowClick}
-        sortColumn={sortColumn}
-        sortDirection={sortDirection}
-        onSort={handleSort}
-      />
+      {/* Empty state — only shown when no filters are active */}
+      {showEmptyState ? (
+        <EmptyState
+          variant="payments"
+          title="No payments yet"
+          body="Once a customer completes a checkout, every transaction lands here. Create a test payment in sandbox to see it work."
+          cta={{
+            label: "Read the API",
+            href: "https://docs.useroutr.com",
+          }}
+        />
+      ) : (
+        <DataTable<PaymentWithIndex>
+          columns={columns}
+          data={payments as PaymentWithIndex[]}
+          isLoading={isLoading}
+          loadingRows={limit}
+          emptyMessage="No payments match these filters."
+          onRowClick={handleRowClick}
+          sortColumn={sortColumn}
+          sortDirection={sortDirection}
+          onSort={handleSort}
+        />
+      )}
 
       {/* Pagination */}
       <Pagination

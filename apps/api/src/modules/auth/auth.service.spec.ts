@@ -31,12 +31,19 @@ jest.mock('../prisma/prisma.service', () => ({
 
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MerchantSettlementService } from '../merchant/merchant-settlement.service';
 
 interface MockMerchant {
   id: string;
   name: string;
   email: string;
   passwordHash: string;
+  emailVerifiedAt: Date | null;
+  verificationCodeHash: string | null;
+  verificationCodeExpiresAt: Date | null;
+  passwordResetTokenHash: string | null;
+  passwordResetExpiresAt: Date | null;
   apiKeyHash: string | null;
   webhookUrl: string | null;
   webhookSecret: string | null;
@@ -54,6 +61,11 @@ const mockMerchant: MockMerchant = {
   name: 'Test Corp',
   email: 'test@example.com',
   passwordHash: '$2b$12$hashedpassword',
+  emailVerifiedAt: null,
+  verificationCodeHash: null,
+  verificationCodeExpiresAt: null,
+  passwordResetTokenHash: null,
+  passwordResetExpiresAt: null,
   apiKeyHash: null,
   webhookUrl: null,
   webhookSecret: null,
@@ -71,6 +83,19 @@ const mockJwtService = {
   verify: jest.fn(),
 };
 
+const mockNotificationsService = {
+  sendVerificationCodeEmail: jest.fn().mockResolvedValue(undefined),
+  sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+};
+
+// MerchantSettlementService stub — register() calls provision() in a
+// try/catch, so even a resolved Promise is enough to keep tests green.
+// Specific tests can override to assert provisioning was triggered or
+// to simulate a Stellar outage.
+const mockSettlementService = {
+  provision: jest.fn().mockResolvedValue({ stellarAddress: 'G_TEST_ADDR' }),
+};
+
 describe('AuthService', () => {
   let service: AuthService;
 
@@ -80,6 +105,14 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: JwtService, useValue: mockJwtService },
+        {
+          provide: NotificationsService,
+          useValue: mockNotificationsService,
+        },
+        {
+          provide: MerchantSettlementService,
+          useValue: mockSettlementService,
+        },
       ],
     }).compile();
 
@@ -113,11 +146,13 @@ describe('AuthService', () => {
       expect(result.merchant).not.toHaveProperty('passwordHash');
       expect(result.merchant).not.toHaveProperty('apiKeyHash');
       expect(mockPrismaService.merchant.create).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           name: 'Test Corp',
           email: 'test@example.com',
           passwordHash: expect.any(String) as string,
-        },
+          verificationCodeHash: expect.any(String) as string,
+          verificationCodeExpiresAt: expect.any(Date) as Date,
+        }) as object,
       });
     });
 

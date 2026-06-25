@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 
 interface HttpExceptionBody {
   message?: string;
@@ -35,6 +35,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const requestId = request?.id;
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'An unexpected error occurred';
@@ -53,8 +55,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         code = STATUS_CODE_MAP[status] ?? 'internal_error';
       }
     } else {
+      // Unhandled: log full stack with request_id so we can correlate
+      // server logs to client-reported failures.
       this.logger.error(
-        `Unhandled exception: ${exception instanceof Error ? exception.message : String(exception)}`,
+        `[${requestId ?? 'no-request-id'}] Unhandled exception: ${
+          exception instanceof Error ? exception.message : String(exception)
+        }`,
         exception instanceof Error ? exception.stack : undefined,
       );
     }
@@ -63,7 +69,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       error: {
         code,
         message,
-        docs: `https://docs.useroutr.io/errors/${code}`,
+        docs: `https://docs.useroutr.com/errors/${code}`,
+        ...(requestId ? { request_id: requestId } : {}),
         ...(details ? { details } : {}),
       },
     };

@@ -1,24 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useState } from "react";
-import { ArrowLeft, Check } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { ArrowRight, ArrowLeft, Check } from "lucide-react";
 import { z } from "zod";
 
-import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@useroutr/ui";
-import Logo from "../../../../public/logo.svg";
+import { AuthScaffold } from "@/components/brand/AuthScaffold";
 
 const schema = z
   .object({
@@ -30,11 +19,17 @@ const schema = z
     confirmPassword: z.string(),
   })
   .refine((d) => d.password === d.confirmPassword, {
-    message: "Passwords do not match",
+    message: "Passwords don't match",
     path: ["confirmPassword"],
   });
 
 type FormErrors = { password?: string; confirmPassword?: string };
+
+const passwordRules = [
+  { test: (p: string) => p.length >= 8, label: "8+ characters" },
+  { test: (p: string) => /[A-Z]/.test(p), label: "One uppercase letter" },
+  { test: (p: string) => /[0-9]/.test(p), label: "One number" },
+];
 
 export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
@@ -46,12 +41,6 @@ export default function ResetPasswordPage() {
   const [serverError, setServerError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-
-  const passwordRules = [
-    { label: "At least 8 characters", met: password.length >= 8 },
-    { label: "Uppercase letter", met: /[A-Z]/.test(password) },
-    { label: "One number", met: /[0-9]/.test(password) },
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +66,7 @@ export default function ResetPasswordPage() {
       setServerError(
         err instanceof Error
           ? err.message
-          : "Something went wrong. The link may have expired."
+          : "Something went wrong. The link may have expired.",
       );
     } finally {
       setIsSubmitting(false);
@@ -86,170 +75,166 @@ export default function ResetPasswordPage() {
 
   if (!resetToken) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-        <div className="w-full max-w-sm text-center">
-          <FieldGroup>
-            <div className="flex flex-col items-center gap-2">
-              <Link href="/" className="flex flex-col items-center gap-2 font-medium">
-                <Image src={Logo} alt="Useroutr" width={120} height={40} />
-              </Link>
-              <h1 className="text-xl font-bold">Invalid reset link</h1>
-              <FieldDescription>
-                This password reset link is invalid or has expired.
-              </FieldDescription>
-            </div>
-            <Field>
-              <Button className="w-full" asChild>
-                <Link href="/forgot-password">Request a new link</Link>
-              </Button>
-            </Field>
-          </FieldGroup>
-        </div>
-      </div>
+      <AuthScaffold
+        illustration="reset-password"
+        eyebrow="Reset password"
+        title={
+          <>
+            Link <span className="editorial-italic">expired.</span>
+          </>
+        }
+        description="This password reset link is invalid or has expired. Request a new one."
+      >
+        <Link href="/forgot-password" className="block">
+          <span className="magnet inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-accent text-[14px] font-semibold text-foreground transition-colors hover:bg-accent-ink hover:text-white">
+            Request a new link
+            <ArrowRight className="size-4" strokeWidth={1.6} />
+          </span>
+        </Link>
+      </AuthScaffold>
     );
   }
 
   if (isSuccess) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-        <div className="w-full max-w-sm text-center">
-          <FieldGroup>
-            <div className="flex flex-col items-center gap-2">
-              <Link href="/" className="flex flex-col items-center gap-2 font-medium">
-                <Image src={Logo} alt="Useroutr" width={120} height={40} />
-              </Link>
-              <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-                <Check className="size-6 text-primary" />
-              </div>
-              <h1 className="text-xl font-bold">Password reset</h1>
-              <FieldDescription>
-                Your password has been updated. You can now sign in with your new
-                password.
-              </FieldDescription>
-            </div>
-            <Field>
-              <Button className="w-full" asChild>
-                <Link href="/login">Sign in</Link>
-              </Button>
-            </Field>
-          </FieldGroup>
+      <AuthScaffold
+        illustration="reset-password"
+        eyebrow="Password updated"
+        title={
+          <>
+            Locked <span className="editorial-italic">in.</span>
+          </>
+        }
+        description="Your password has been reset. Sign in with your new credentials."
+      >
+        <div className="rounded-lg border border-border bg-card p-5">
+          <div className="flex items-center gap-3">
+            <span className="grid size-8 place-items-center rounded-full bg-accent text-white">
+              <Check className="size-4" strokeWidth={2} />
+            </span>
+            <p className="text-[14px] font-medium text-foreground">
+              Password updated
+            </p>
+          </div>
         </div>
-      </div>
+        <Link href="/login" className="mt-4 block">
+          <span className="magnet inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-accent text-[14px] font-semibold text-foreground transition-colors hover:bg-accent-ink hover:text-white">
+            Sign in
+            <ArrowRight className="size-4" strokeWidth={1.6} />
+          </span>
+        </Link>
+      </AuthScaffold>
     );
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col gap-6">
-          <form onSubmit={handleSubmit} noValidate>
-            <FieldGroup>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <Link href="/" className="flex flex-col items-center gap-2 font-medium">
-                  <Image src={Logo} alt="Useroutr" width={120} height={40} />
-                </Link>
-                <h1 className="text-xl font-bold">Set a new password</h1>
-                <FieldDescription>
-                  Choose a strong password for your account.
-                </FieldDescription>
-              </div>
-
-              {serverError && (
-                <div
-                  className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                  role="alert"
-                >
-                  {serverError}
-                </div>
-              )}
-
-              <Field>
-                <FieldLabel htmlFor="password">New Password</FieldLabel>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter new password"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (errors.password)
-                      setErrors((prev) => ({ ...prev, password: undefined }));
-                  }}
-                  autoComplete="new-password"
-                  required
-                />
-                {errors.password && <FieldError>{errors.password}</FieldError>}
-                <div className="rounded-md bg-muted/50 px-3 py-2">
-                  <ul className="space-y-1.5">
-                    {passwordRules.map((rule) => (
-                      <li
-                        key={rule.label}
-                        className={cn(
-                          "flex items-center gap-2 text-xs",
-                          rule.met ? "text-primary" : "text-muted-foreground"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "flex size-4 items-center justify-center rounded-full border",
-                            rule.met
-                              ? "border-primary/30 bg-primary/10"
-                              : "border-border"
-                          )}
-                        >
-                          <Check className="size-2.5" />
-                        </span>
-                        {rule.label}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="confirm-password">
-                  Confirm Password
-                </FieldLabel>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="Re-enter your password"
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (errors.confirmPassword)
-                      setErrors((prev) => ({
-                        ...prev,
-                        confirmPassword: undefined,
-                      }));
-                  }}
-                  autoComplete="new-password"
-                  required
-                />
-                {errors.confirmPassword && (
-                  <FieldError>{errors.confirmPassword}</FieldError>
-                )}
-              </Field>
-
-              <Field>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? "Resetting..." : "Reset Password"}
-                </Button>
-              </Field>
-            </FieldGroup>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-1 font-semibold text-primary transition-colors hover:text-primary/80"
-            >
-              <ArrowLeft className="size-3.5" />
-              Back to sign in
-            </Link>
-          </p>
+    <AuthScaffold
+      illustration="reset-password"
+      eyebrow="Set a new password"
+      title={
+        <>
+          Pick something <span className="editorial-italic">good.</span>
+        </>
+      }
+      description="Choose a strong password you'll remember. We'll keep it hashed and never see it in plain text."
+      footnote={
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-1 link-underline text-foreground"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back to sign in
+        </Link>
+      }
+    >
+      {serverError && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 text-[13px] text-destructive"
+        >
+          {serverError}
         </div>
-      </div>
-    </div>
+      )}
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        <div>
+          <label className="block">
+            <span className="eyebrow block">New password</span>
+            <span className="mt-2 block">
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrors((p) => ({ ...p, password: undefined }));
+                }}
+                autoComplete="new-password"
+                required
+                className="h-11 w-full rounded-lg border border-border bg-card px-3.5 text-[14px] text-foreground placeholder:text-text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+              />
+            </span>
+            {errors.password && (
+              <span className="mt-1.5 block text-[12px] text-destructive">
+                {errors.password}
+              </span>
+            )}
+          </label>
+          <ul className="mt-2 grid grid-cols-3 gap-1 text-[11px]">
+            {passwordRules.map((r) => {
+              const ok = r.test(password);
+              return (
+                <li
+                  key={r.label}
+                  className={`flex items-center gap-1.5 ${
+                    ok ? "text-foreground" : "text-text-faint"
+                  }`}
+                >
+                  <span
+                    className={`grid size-3.5 place-items-center rounded-full ${
+                      ok ? "bg-accent text-white" : "border border-border"
+                    }`}
+                  >
+                    {ok && <Check className="size-2" strokeWidth={3} />}
+                  </span>
+                  {r.label}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <label className="block">
+          <span className="eyebrow block">Confirm password</span>
+          <span className="mt-2 block">
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                setErrors((p) => ({ ...p, confirmPassword: undefined }));
+              }}
+              autoComplete="new-password"
+              required
+              className="h-11 w-full rounded-lg border border-border bg-card px-3.5 text-[14px] text-foreground placeholder:text-text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+            />
+          </span>
+          {errors.confirmPassword && (
+            <span className="mt-1.5 block text-[12px] text-destructive">
+              {errors.confirmPassword}
+            </span>
+          )}
+        </label>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="magnet mt-2 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-accent text-[14px] font-semibold text-foreground transition-colors hover:bg-accent-ink hover:text-white disabled:opacity-60"
+        >
+          {isSubmitting ? "Saving…" : "Save new password"}
+          {!isSubmitting && <ArrowRight className="size-4" strokeWidth={1.6} />}
+        </button>
+      </form>
+    </AuthScaffold>
   );
 }

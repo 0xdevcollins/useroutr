@@ -5,9 +5,19 @@ import { Button, Input, Switch, Skeleton, useToast } from "@useroutr/ui";
 import {
   useMerchantProfile,
   useUpdateMerchantProfile,
+  useProvisionSettlement,
 } from "@/hooks/useSettings";
 import { motion } from "framer-motion";
-import { Building2, Mail, Bell, Webhook, ShieldAlert } from "lucide-react";
+import {
+  Building2,
+  Mail,
+  Bell,
+  Webhook,
+  ShieldAlert,
+  Wallet,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 12 },
@@ -23,6 +33,7 @@ export default function SettingsPage() {
   const { data: merchant, isLoading: isLoadingProfile } =
     useMerchantProfile();
   const updateProfile = useUpdateMerchantProfile();
+  const provisionSettlement = useProvisionSettlement();
 
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -130,12 +141,105 @@ export default function SettingsPage() {
         </div>
       </motion.div>
 
+      {/* Settlement wallet ────────────────────────────────────────── */}
       <motion.div
         className="surface p-6"
         variants={fadeUp}
         initial="hidden"
         animate="visible"
         custom={1}
+      >
+        <div className="flex items-center gap-3 mb-1">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+            <Wallet size={18} className="text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground">
+              Settlement wallet
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Where USDC payments land on Stellar
+            </p>
+          </div>
+        </div>
+
+        {merchant?.settlementAddress ? (
+          // ── Provisioned ───────────────────────────────────────────
+          <div className="mt-5 space-y-3">
+            <div className="flex items-start gap-3 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+              <CheckCircle2
+                size={16}
+                className="mt-0.5 shrink-0 text-green-600"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  Settlement active
+                </p>
+                <p
+                  className="mt-1 break-all text-xs text-muted-foreground"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {merchant.settlementAddress}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Managed by Useroutr · You can upgrade to self-custody
+                  (passkey or bring-your-own wallet) anytime.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // ── Not yet provisioned ───────────────────────────────────
+          <div className="mt-5 space-y-3">
+            <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <AlertCircle
+                size={16}
+                className="mt-0.5 shrink-0 text-amber-600"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  No settlement wallet yet
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  You can&apos;t accept crypto payments until a Stellar
+                  settlement wallet is provisioned. We&apos;ll create and
+                  manage one for you — funded reserves, USDC trustline
+                  included. Withdraw to a wallet you control anytime.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() =>
+                provisionSettlement.mutate(undefined, {
+                  onSuccess: (data) =>
+                    toast(
+                      `Settlement wallet provisioned: ${data.stellarAddress.slice(0, 8)}…${data.stellarAddress.slice(-6)}`,
+                      "success",
+                    ),
+                  onError: (err) =>
+                    toast(
+                      err.message ||
+                        "Provisioning failed. Check Stellar Horizon status and try again.",
+                      "error",
+                    ),
+                })
+              }
+              loading={provisionSettlement.isPending}
+              className="w-full"
+            >
+              <Wallet size={15} className="mr-2" />
+              Provision settlement wallet
+            </Button>
+          </div>
+        )}
+      </motion.div>
+
+      <motion.div
+        className="surface p-6"
+        variants={fadeUp}
+        initial="hidden"
+        animate="visible"
+        custom={2}
       >
         <div className="flex items-center gap-3 mb-1">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal/10">

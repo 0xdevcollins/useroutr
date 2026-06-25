@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Moon, SidebarIcon, Sun } from "lucide-react";
+import { Bell, SidebarIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -14,7 +14,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { useTheme } from "@/providers/ThemeProvider";
+import { ThemeToggle } from "@/components/brand/ThemeToggle";
 
 const routeLabels: Record<string, string> = {
   "/": "Overview",
@@ -32,7 +32,6 @@ const routeLabels: Record<string, string> = {
 
 export function SiteHeader() {
   const { toggleSidebar } = useSidebar();
-  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
 
   const segments = pathname.split("/").filter(Boolean);
@@ -76,22 +75,11 @@ export function SiteHeader() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <Bell className="size-4" />
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="size-8">
+            <Bell className="size-4" strokeWidth={1.5} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={toggleTheme}
-          >
-            {theme === "dark" ? (
-              <Sun className="size-4" />
-            ) : (
-              <Moon className="size-4" />
-            )}
-          </Button>
+          <ThemeToggle size="sm" />
         </div>
       </div>
     </header>
