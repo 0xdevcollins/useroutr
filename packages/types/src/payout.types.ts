@@ -1,40 +1,25 @@
-export type PayoutStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-export type DestType = 'BANK_ACCOUNT' | 'MOBILE_MONEY' | 'CRYPTO_WALLET' | 'STELLAR';
-
-export interface PayoutDestination {
-  type?: string;
-  accountNumber?: string;
-  routingNumber?: string;
-  bankName?: string;
-  iban?: string;
-  bic?: string;
-  branchCode?: string;
-  country?: string;
-  phoneNumber?: string;
-  provider?: string;
-  address?: string;
-  network?: string;
-  asset?: string;
-  memo?: string;
+export interface Recipient {
+  id: string;
+  merchantId: string;
+  name: string;
+  type: 'BANK_ACCOUNT' | 'MOBILE_MONEY' | 'CRYPTO_WALLET' | 'STELLAR';
+  details: Record<string, any>;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Payout {
-  id: string;
-  merchantId: string;
-  recipientName: string;
-  destinationType: DestType;
-  destination: PayoutDestination;
-  amount: string;
-  currency: string;
-  status: PayoutStatus;
-  stellarTxHash: string | null;
-  scheduledAt: string | null;
-  completedAt: string | null;
-  failureReason: string | null;
-  batchId: string | null;
-  idempotencyKey: string | null;
-  createdAt: string;
+	id: string;
+	merchantId?: string;
+	recipientId?: string; // new
+	recipientName?: string;
+	destination?: Record<string, any>;
+	amount: bigint | number | string;
+	currency?: string;
+	status?: string;
+	scheduledAt?: string;
+	completedAt?: string;
 }
 
 export interface PayoutListResponse {
