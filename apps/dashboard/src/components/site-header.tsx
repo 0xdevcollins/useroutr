@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, SidebarIcon } from "lucide-react";
+import { SidebarIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -14,6 +14,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { ThemeToggle } from "@/components/brand/ThemeToggle";
 
 const routeLabels: Record<string, string> = {
@@ -76,9 +77,7 @@ export function SiteHeader() {
         </Breadcrumb>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="size-8">
-            <Bell className="size-4" strokeWidth={1.5} />
-          </Button>
+          <NotificationBell />
           <ThemeToggle size="sm" />
         </div>
       </div>

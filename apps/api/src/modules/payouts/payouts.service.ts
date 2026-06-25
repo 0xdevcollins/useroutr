@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { StellarService } from '../stellar/stellar.service';
 import { EventsService } from '../events/events/events.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePayoutDto, BulkPayoutDto } from './dto/create-payout.dto';
 import { PayoutFiltersDto } from './dto/payout-filters.dto';
 import { randomUUID } from 'crypto';
@@ -43,7 +44,8 @@ export class PayoutsService {
     private readonly prisma: PrismaService,
     private readonly webhooks: WebhooksService,
     private readonly stellar: StellarService,
-    private readonly events: EventsService,
+    private readonly eventsService: EventsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Create single payout ──────────────────────────────────────────────────
@@ -102,7 +104,6 @@ async create(
     this.webhooks
       .dispatch(merchantId, 'payout.initiated', this.webhookPayload(payout) as Prisma.InputJsonValue)
       .catch(() => undefined);
-    this.emitPayoutStatus(payout);
 
     // Process immediately unless scheduled for the future
     if (!payout.scheduledAt || payout.scheduledAt <= new Date()) {
@@ -157,7 +158,6 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
         });
         results.push({ index: i, payoutId: payout.id });
         accepted++;
-        this.emitPayoutStatus(payout);
 
         if (!payout.scheduledAt || payout.scheduledAt <= new Date()) {
           this.processPayout(payout).catch(() => undefined);
@@ -262,7 +262,6 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
     this.webhooks
       .dispatch(merchantId, 'payout.initiated', this.webhookPayload(reset) as Prisma.InputJsonValue)
       .catch(() => undefined);
-    this.emitPayoutStatus(reset);
 
     this.processPayout(reset).catch(() => undefined);
 
@@ -272,11 +271,10 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
   // ── Internal processing ───────────────────────────────────────────────────
 
   private async processPayout(payout: Payout): Promise<void> {
-    const processing = await this.prisma.payout.update({
+    await this.prisma.payout.update({
       where: { id: payout.id },
       data: { status: PayoutStatus.PROCESSING },
     });
-    this.emitPayoutStatus(processing);
 
     try {
       const destination = payout.destination as Record<string, unknown>;
@@ -298,13 +296,31 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
         where: { id: payout.id },
         data: { status: PayoutStatus.FAILED, failureReason },
       });
+      this.eventsService.emitPayoutStatus(
+        payout.merchantId,
+        payout.id,
+        PayoutStatus.FAILED,
+        {
+          amount: failed.amount.toString(),
+          currency: failed.currency,
+          failureReason,
+          updatedAt: new Date(),
+        },
+      );
+      void this.notifications
+        .notifyPayoutFailed(
+          payout.merchantId,
+          payout.id,
+          payout.recipientName,
+          failureReason,
+        )
+        .catch(() => undefined);
       this.webhooks
         .dispatch(payout.merchantId, 'payout.failed', {
           ...this.webhookPayload(failed),
           failureReason,
         } as Prisma.InputJsonValue)
         .catch(() => undefined);
-      this.emitPayoutStatus(failed);
       this.logger.error(`Payout ${payout.id} failed: ${failureReason}`);
     }
   }
@@ -352,13 +368,31 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
       },
     });
 
+    this.eventsService.emitPayoutStatus(
+      payout.merchantId,
+      payout.id,
+      PayoutStatus.COMPLETED,
+      {
+        amount: completed.amount.toString(),
+        currency: completed.currency,
+        stellarTxHash: txHash,
+        updatedAt: new Date(),
+      },
+    );
+    void this.notifications
+      .notifyPayoutCompleted(
+        payout.merchantId,
+        payout.id,
+        payout.recipientName,
+      )
+      .catch(() => undefined);
+
     this.webhooks
       .dispatch(payout.merchantId, 'payout.completed', {
         ...this.webhookPayload(completed),
         stellarTxHash: txHash,
       } as Prisma.InputJsonValue)
       .catch(() => undefined);
-    this.emitPayoutStatus(completed);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -395,15 +429,5 @@ private formatResponse(payout: Payout) {
       ...(payout.stellarTxHash && { stellarTxHash: payout.stellarTxHash }),
       createdAt: payout.createdAt.toISOString(),
     };
-  }
-
-  private emitPayoutStatus(payout: Payout): void {
-    this.events.emitPayoutStatus(payout.merchantId, payout.id, payout.status, {
-      amount: payout.amount.toString(),
-      currency: payout.currency,
-      stellarTxHash: payout.stellarTxHash ?? undefined,
-      failureReason: payout.failureReason ?? undefined,
-      updatedAt: new Date(),
-    });
   }
 }

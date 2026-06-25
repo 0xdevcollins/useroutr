@@ -40,6 +40,7 @@ import { ethers } from 'ethers';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFiltersDto } from './dto/payment-filters.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 import * as crypto from 'crypto';
 
 interface CheckoutLineItem {
@@ -151,6 +152,7 @@ export class PaymentsService implements OnModuleInit {
     private readonly cctpService: CctpService,
     @InjectQueue(CCTP_OBSERVE_QUEUE) private readonly cctpQueue: Queue,
     private readonly configService: ConfigService,
+    private readonly notificationsService: NotificationsService,
   ) {
     const secretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     this.stripe = secretKey ? new Stripe(secretKey) : null;
@@ -207,6 +209,37 @@ export class PaymentsService implements OnModuleInit {
       updatedPayment as unknown as import('@prisma/client').Prisma.InputJsonValue,
       updatedPayment.id,
     );
+
+    const metadata =
+      updatedPayment.metadata && typeof updatedPayment.metadata === 'object'
+        ? (updatedPayment.metadata as Record<string, unknown>)
+        : {};
+    const customerEmail =
+      typeof metadata.customerEmail === 'string'
+        ? metadata.customerEmail
+        : typeof metadata.email === 'string'
+          ? metadata.email
+          : undefined;
+
+    if (status === PaymentStatus.COMPLETED) {
+      const receivedAmount = updatedPayment.destAmount?.toString() ?? '0';
+
+      void this.notificationsService
+        .notifyPaymentReceived(
+          updatedPayment.merchantId,
+          updatedPayment.id,
+          receivedAmount,
+          updatedPayment.destAsset || 'USD',
+          customerEmail,
+        )
+        .catch(() => undefined);
+    }
+
+    if (status === PaymentStatus.REFUNDING) {
+      void this.notificationsService
+        .notifyRefundInitiated(updatedPayment.merchantId, updatedPayment.id)
+        .catch(() => undefined);
+    }
 
     return updatedPayment;
   }
@@ -391,9 +424,13 @@ export class PaymentsService implements OnModuleInit {
     const payment = await this.prisma.payment.create({
       data: {
         merchantId: internal.merchant.id,
+        quoteId: null,
         status: PaymentStatus.PENDING,
         // Source fields stay null until the customer picks a method.
         // Quote stays null too — created when the method is chosen.
+        sourceChain: null,
+        sourceAsset: null,
+        sourceAmount: null,
         destChain: internal.merchant.settlementChain,
         destAsset: internal.merchant.settlementAsset,
         destAmount,

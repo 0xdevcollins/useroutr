@@ -6,9 +6,10 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
 import { StellarModule } from '../stellar/stellar.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, WebhooksModule, StellarModule, AuthModule, EventsModule],
+  imports: [PrismaModule, WebhooksModule, StellarModule, AuthModule, EventsModule, NotificationsModule],
   providers: [PayoutsService],
   controllers: [PayoutsController],
   exports: [PayoutsService],

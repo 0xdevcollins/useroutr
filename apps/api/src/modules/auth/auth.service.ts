@@ -205,6 +205,10 @@ export class AuthService {
       },
     });
 
+    void this.notifications
+      .notifyApiKeyCreated(merchantId, apiKey.id, apiKey.name)
+      .catch(() => undefined);
+
     return {
       apiKey: plainTextKey,
       id: apiKey.id,

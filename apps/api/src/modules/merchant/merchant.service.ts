@@ -10,11 +10,15 @@ import { SettlementDto } from './dto/settlement.dto';
 import { BrandingDto } from './dto/branding.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { KybSubmissionDto } from './dto/kyb-submission.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 import { detectAddressChain, type Chain } from '@useroutr/types';
 
 @Injectable()
 export class MerchantService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   // ── Profile ──────────────────────────────────────────────────
 
@@ -138,7 +142,9 @@ export class MerchantService {
       },
     });
 
-    // TODO: send invite email via NotificationsModule once implemented
+    void this.notifications
+      .notifyTeamMemberJoined(merchantId, member.email, member.role)
+      .catch(() => undefined);
 
     return member;
   }
