@@ -33,30 +33,10 @@ export default function PayoutsPage() {
             <p className="text-sm text-muted-foreground">{label}</p>
             <div className="mt-2 h-8 w-28 skeleton" />
           </div>
-        </div>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <PayoutFilterBar
-            onStatusChange={handleStatusChange}
-            onDestinationTypeChange={handleDestinationTypeChange}
-            onCurrencyChange={handleCurrencyChange}
-            onDateRangeChange={handleDateRangeChange}
-            onBatchIdChange={handleBatchIdChange}
-            selectedStatus={status}
-            selectedDestinationType={destinationType}
-            selectedCurrency={currency}
-            selectedBatchId={batchId}
-            currencies={availableCurrencies}
-          />
-          {hasActiveFilters && (
-            <Button variant="outline" size="sm" onClick={resetFilters}>
-              Clear filters
-            </Button>
-          )}
-        </div>
+        ))}
       </div>
 
       <PayoutsTable data={payoutsQuery.data?.data || []} isLoading={payoutsQuery.isLoading} />
     </div>
   );
 }
-
