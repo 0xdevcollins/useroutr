@@ -82,7 +82,7 @@ async create(
         ...dto,
         recipientName: recipient.name,
         destinationType: recipient.type,
-        destination: recipient.details as Prisma.InputJsonValue,
+        destination: recipient.details as unknown as CreatePayoutDto['destination'],
       };
     }
 
@@ -138,7 +138,7 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
             ...item,
             recipientName: recipient.name,
             destinationType: recipient.type,
-            destination: recipient.details as Prisma.InputJsonValue,
+            destination: recipient.details as unknown as CreatePayoutDto['destination'],
           };
         }
 

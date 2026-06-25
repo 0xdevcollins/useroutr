@@ -11,5 +11,3 @@ export const RecipientFiltersSchema = z.object({
 
 export type RecipientFiltersDto = z.infer<typeof RecipientFiltersSchema>;
 
-RecipientFiltersDto.schema = RecipientFiltersSchema;
-
