@@ -1,10 +1,11 @@
 "use client";
 
 import { Button } from '@useroutr/ui';
-import { DialogProps } from '@/components/ui/dialog';
 
-interface EditRecipientDialogProps extends DialogProps {
+interface EditRecipientDialogProps {
   id: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function EditRecipientDialog({ id, ...props }: EditRecipientDialogProps) {

@@ -1,7 +1,14 @@
 "use client";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import {
+  ShadTable as Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  ShadTableHeader as TableHeader,
+  TableRow,
+  Badge,
+} from '@useroutr/ui';
 import { format } from 'date-fns';
 
 interface Payout {

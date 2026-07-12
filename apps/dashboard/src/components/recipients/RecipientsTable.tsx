@@ -4,20 +4,10 @@ import { useState } from 'react';
 import { Button } from '@useroutr/ui';
 import { MoreHorizontal, Trash2, Edit3 } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { 
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  Badge,
+  ShadTable as Table, TableBody, TableCell, TableHead, ShadTableHeader as TableHeader, TableRow,
+} from '@useroutr/ui';
 import { DestType } from '@useroutr/types';
 import { EditRecipientDialog } from './EditRecipientDialog';
 import { DeleteRecipientDialog } from './DeleteRecipientDialog';

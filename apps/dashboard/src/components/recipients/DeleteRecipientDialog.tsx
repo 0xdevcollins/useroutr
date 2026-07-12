@@ -1,10 +1,11 @@
 "use client";
 
 import { Button } from '@useroutr/ui';
-import { DialogProps } from '@/components/ui/dialog';
 
-interface DeleteRecipientDialogProps extends DialogProps {
+interface DeleteRecipientDialogProps {
   id: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function DeleteRecipientDialog({ id, ...props }: DeleteRecipientDialogProps) {

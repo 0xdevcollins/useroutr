@@ -1,9 +1,11 @@
 "use client";
 
 import { useQuery } from '@tanstack/react-query';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+  ShadPopover as Popover, ShadPopoverContent as PopoverContent, ShadPopoverTrigger as PopoverTrigger,
+  Button, Badge,
+} from '@useroutr/ui';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { Recipient } from '@useroutr/types';
 import { cn } from '@/lib/utils';

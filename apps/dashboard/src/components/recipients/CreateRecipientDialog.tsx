@@ -2,11 +2,15 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@useroutr/ui';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
+import {
+  ShadDialog as Dialog, ShadDialogContent as DialogContent, ShadDialogDescription as DialogDescription,
+  ShadDialogFooter as DialogFooter, ShadDialogHeader as DialogHeader, ShadDialogTitle as DialogTitle,
+  ShadInput as Input,
+  ShadLabel as Label,
+  ShadSelect as Select, ShadSelectContent as SelectContent, ShadSelectItem as SelectItem,
+  ShadSelectTrigger as SelectTrigger, ShadSelectValue as SelectValue,
+  useToast,
+} from '@useroutr/ui';
 import { DestType } from '@useroutr/types';
 
 interface CreateRecipientDialogProps {
