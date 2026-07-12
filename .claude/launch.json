@@ -1,11 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    {
-      "name": "www",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=www", "--", "-p", "3005"],
-      "port": 3005
-    }
+    { "name": "www", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--workspace=www", "--", "-p", "3005"], "port": 3005 },
+    { "name": "dashboard", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--workspace=dashboard", "--", "-p", "3001"], "port": 3001 }
   ]
 }
