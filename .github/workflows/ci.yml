@@ -119,8 +119,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned toolchain: a newer stable rustc rejects `ethnum 1.5.2`
+      # (transitive via soroban-sdk) with E0512 on an invalid transmute.
+      # 1.93.0 builds the workspace clean; bump deliberately alongside deps.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: wasm32-unknown-unknown
 
