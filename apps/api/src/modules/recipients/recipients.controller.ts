@@ -20,7 +20,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentMerchant } from '../merchant/decorators/current-merchant.decorator';
 
-@Controller('v1/recipients')
+@Controller('recipients')
 @UseGuards(CombinedAuthGuard)
 export class RecipientsController {
   constructor(private readonly recipientsService: RecipientsService) {}

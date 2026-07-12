@@ -210,6 +210,41 @@ export class StellarService {
     return result.hash;
   }
 
+  /**
+   * Direct payment for same-asset transfers (e.g. XLM → XLM). A path payment
+   * requires a conversion route through the DEX; Horizon rejects a strict-send
+   * path query when the source and destination asset are identical, so those
+   * transfers must use a plain payment operation instead.
+   */
+  async sendPayment(params: {
+    asset: string;
+    amount: string;
+    destinationAccount: string;
+  }): Promise<string> {
+    this.logger.log('Executing Stellar direct payment');
+
+    const keypair = this.requireKeypair();
+    const account = await this.horizonServer.loadAccount(keypair.publicKey());
+
+    const tx = new StellarSdk.TransactionBuilder(account, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(
+        StellarSdk.Operation.payment({
+          destination: params.destinationAccount,
+          asset: this.parseAsset(params.asset),
+          amount: params.amount,
+        }),
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(keypair);
+    const result = await this.horizonServer.submitTransaction(tx);
+    return result.hash;
+  }
+
   // ── Fee collector ──────────────────────────────────────────────────────────
   //
   // Soroban fee-collector deducts the platform fee from the gross amount and

@@ -12,16 +12,16 @@ export function StructuredData() {
       "https://github.com/useroutr",
       "https://linkedin.com/company/useroutr"
     ],
-    "description": "Unified payment infrastructure for fiat and crypto. Accept any currency, settle globally in seconds on Stellar."
+    "description": "The payout platform for businesses paying Africa. Accept USDC from any major chain and deliver to bank accounts and mobile money — settled on Stellar."
   };
 
   const softwareSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "Useroutr Protocol",
+    "name": "Useroutr",
     "applicationCategory": "FinancialApplication",
     "operatingSystem": "Web",
-    "abstract": "One API for fiat and crypto payments. Accept cards, bank transfers, and digital assets — settle globally in seconds.",
+    "abstract": "One API to accept USDC from any major chain and pay out to bank accounts and mobile money — settled on Stellar.",
     "offers": {
       "@type": "Offer",
       "price": "0",

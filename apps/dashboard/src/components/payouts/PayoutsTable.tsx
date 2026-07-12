@@ -1,7 +1,14 @@
 "use client";
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import {
+  ShadTable as Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  ShadTableHeader as TableHeader,
+  TableRow,
+  Badge,
+} from '@useroutr/ui';
 import { format } from 'date-fns';
 
 interface Payout {
@@ -54,7 +61,7 @@ export function PayoutsTable({ data, isLoading }: PayoutsTableProps) {
                 <span className="font-mono">{payout.amount} {payout.currency}</span>
               </TableCell>
               <TableCell>
-                <Badge variant={payout.status === 'COMPLETED' ? 'default' : 'secondary'}>
+                <Badge variant={payout.status === 'COMPLETED' ? 'completed' : 'default'}>
                   {payout.status}
                 </Badge>
               </TableCell>

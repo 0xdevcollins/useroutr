@@ -384,7 +384,9 @@ export class PaymentsService implements OnModuleInit {
     shortCode: string,
     opts: { amount?: number } = {},
   ): Promise<{ id: string }> {
-    this.logger.log(`Creating link-initiated payment for shortCode=${shortCode}`);
+    this.logger.log(
+      `Creating link-initiated payment for shortCode=${shortCode}`,
+    );
 
     // `resolve` enforces 404 (no link), 410 (inactive/expired/exhausted)
     // and increments viewCount as a side-effect. That side-effect is
@@ -447,10 +449,12 @@ export class PaymentsService implements OnModuleInit {
     try {
       await this.linksService.markUsed(internal.id, payment.id);
     } catch (err) {
-      await this.prisma.payment.delete({ where: { id: payment.id } }).catch(() => {
-        // Best-effort cleanup — the payment is meaningless without the link.
-        // Don't mask the underlying conflict by throwing the cleanup error.
-      });
+      await this.prisma.payment
+        .delete({ where: { id: payment.id } })
+        .catch(() => {
+          // Best-effort cleanup — the payment is meaningless without the link.
+          // Don't mask the underlying conflict by throwing the cleanup error.
+        });
       throw err;
     }
 
@@ -1129,8 +1133,12 @@ export class PaymentsService implements OnModuleInit {
           payload: {
             paymentId: payment.id,
             merchantId: payment.merchantId,
-            amount: payment.sourceAmount ? this.toNumber(payment.sourceAmount) : 0,
-            currency: this.getCardCurrency(payment.sourceAsset ?? '').toUpperCase(),
+            amount: payment.sourceAmount
+              ? this.toNumber(payment.sourceAmount)
+              : 0,
+            currency: this.getCardCurrency(
+              payment.sourceAsset ?? '',
+            ).toUpperCase(),
             provider: 'stripe',
             stripePaymentIntentId: paymentIntent.id,
             settlementStatus: 'queued',
@@ -1214,7 +1222,7 @@ export class PaymentsService implements OnModuleInit {
       };
     }
 
-    // Same auto-fill pattern as createCardSession: link-initiated payments
+    // Auto-fill pattern: link-initiated payments
     // arrive here without source fields. The bank-transfer choice implies
     // a USD-denominated transfer sized to the destination amount.
     if (!payment.sourceAmount || !payment.sourceAsset) {

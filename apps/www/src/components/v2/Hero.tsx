@@ -45,26 +45,25 @@ export function Hero({ onWaitlistClick }: HeroProps) {
         >
           <motion.h1
             variants={rise}
-            className="text-[42px] leading-[0.98] tracking-[-0.045em] text-ink sm:text-[56px] md:text-[76px] lg:text-[92px]"
+            className="text-[42px] leading-[0.98] tracking-[-0.045em] text-ink sm:text-[56px] md:text-[76px] lg:text-[88px]"
             style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
           >
-            <span className="block whitespace-nowrap">
-              Cross-chain payments,
-            </span>
-            <span className="block whitespace-nowrap">
-              <span className="editorial-italic text-accent">without</span> the
-              custody.
+            <span className="block">Payouts that arrive in</span>
+            <span className="block">
+              <span className="editorial-italic text-accent">minutes</span>, not
+              days.
             </span>
           </motion.h1>
 
           <motion.p
             variants={rise}
-            className="mx-auto mt-8 max-w-[620px] text-[16px] leading-relaxed text-ink-2 md:text-[18px]"
+            className="mx-auto mt-8 max-w-[640px] text-[16px] leading-relaxed text-ink-2 md:text-[18px]"
           >
-            One API for accepting and settling payments across chains. Built on
-            Stellar.{" "}
+            Useroutr is the payout platform for businesses paying Africa. Accept
+            USDC from any major chain, and deliver to bank accounts and mobile
+            money in Nigeria —{" "}
             <span className="text-ink">
-              Useroutr never holds the money in between.
+              settled on Stellar, at a fraction of legacy cost.
             </span>
           </motion.p>
 
@@ -74,7 +73,7 @@ export function Hero({ onWaitlistClick }: HeroProps) {
           >
             <button type="button" onClick={onWaitlistClick} className="magnet">
               <span className="pill pill-accent">
-                Open an account
+                Become a design partner
                 <ArrowRight className="size-4" strokeWidth={1.6} />
               </span>
             </button>
@@ -91,6 +90,30 @@ export function Hero({ onWaitlistClick }: HeroProps) {
               />
             </Link>
           </motion.div>
+
+          <motion.div
+            variants={rise}
+            className="mx-auto mt-10 flex max-w-[720px] flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[13px] text-ink-3"
+          >
+            <span>
+              <span className="text-ink">Minutes</span> to an NGN bank account
+              <sup className="ml-0.5 text-ink-4">*</sup>
+            </span>
+            <span aria-hidden className="text-ink-4">
+              ·
+            </span>
+            <span>
+              <span className="text-ink">One API</span> from any chain to local
+              rails
+            </span>
+            <span aria-hidden className="text-ink-4">
+              ·
+            </span>
+            <span>
+              <span className="text-ink">Published pricing</span>, mid-market
+              rate on every quote
+            </span>
+          </motion.div>
         </motion.div>
 
         {/* Interactive demo widget — replaces the static card+arc visual */}
@@ -101,6 +124,10 @@ export function Hero({ onWaitlistClick }: HeroProps) {
           className="relative mx-auto mt-16 md:mt-20"
         >
           <DemoWidget />
+          <p className="mx-auto mt-6 max-w-[560px] text-center text-[12px] leading-relaxed text-ink-4">
+            *Delivery-time figures are targets until launch metrics are
+            published.
+          </p>
         </motion.div>
       </div>
     </section>

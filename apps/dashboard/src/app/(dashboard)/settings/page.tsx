@@ -18,6 +18,7 @@ import {
   Wallet,
   CheckCircle2,
   AlertCircle,
+  Radio,
 } from "lucide-react";
 
 const fadeUp = {

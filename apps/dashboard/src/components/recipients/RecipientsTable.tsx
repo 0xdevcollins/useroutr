@@ -4,30 +4,37 @@ import { useState } from 'react';
 import { Button } from '@useroutr/ui';
 import { MoreHorizontal, Trash2, Edit3 } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { 
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { DestType } from '@useroutr/types';
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  Badge,
+  ShadTable as Table, TableBody, TableCell, TableHead, ShadTableHeader as TableHeader, TableRow,
+} from '@useroutr/ui';
+import { Recipient } from '@useroutr/types';
 import { EditRecipientDialog } from './EditRecipientDialog';
 import { DeleteRecipientDialog } from './DeleteRecipientDialog';
 
-interface Recipient {
-  id: string;
-  name: string;
-  type: DestType;
-  isDefault: boolean;
-  createdAt: string;
+function truncateMiddle(s: string, n = 6): string {
+  return s.length > n * 2 ? `${s.slice(0, n)}…${s.slice(-4)}` : s;
+}
+
+/** Render a recipient's destination from its `details`, masked where sensitive. */
+function formatDestination(r: Recipient): string {
+  const d = r.details ?? {};
+  switch (r.type) {
+    case 'BANK_ACCOUNT': {
+      const prefix = d.bankName ? `${d.bankName} ` : '';
+      if (d.accountNumber) return `${prefix}····${String(d.accountNumber).slice(-4)}`;
+      if (d.iban) return `${prefix}····${String(d.iban).slice(-4)}`;
+      return '—';
+    }
+    case 'MOBILE_MONEY':
+      return d.phoneNumber ? `${d.provider ? `${d.provider} · ` : ''}${d.phoneNumber}` : '—';
+    case 'CRYPTO_WALLET':
+      return d.address ? `${truncateMiddle(String(d.address))}${d.asset ? ` · ${d.asset}` : ''}` : '—';
+    case 'STELLAR':
+      return d.address ? truncateMiddle(String(d.address)) : '—';
+    default:
+      return '—';
+  }
 }
 
 interface RecipientsTableProps {
@@ -37,8 +44,8 @@ interface RecipientsTableProps {
 }
 
 export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps) {
-  const [editId, setEditId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editRecipient, setEditRecipient] = useState<Recipient | null>(null);
+  const [deleteRecipient, setDeleteRecipient] = useState<Recipient | null>(null);
   const [selected, setSelected] = useState<Recipient[]>([]);
 
   if (isLoading) {
@@ -96,18 +103,15 @@ export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps
                 </TableCell>
                 <TableCell className="font-medium">{recipient.name}</TableCell>
                 <TableCell>
-                  <Badge variant={recipient.type === 'BANK_ACCOUNT' ? 'default' : 'secondary'}>
+                  <Badge variant="default">
                     {recipient.type.replace('_', ' ').toUpperCase()}
                   </Badge>
                 </TableCell>
-                <TableCell className="max-w-[200px] truncate">
-                  {recipient.type === 'BANK_ACCOUNT' && '**** **** 1234'}
-                  {recipient.type === 'CRYPTO_WALLET' && '0x...abc'}
-                  {recipient.type === 'MOBILE_MONEY' && '+1 (555) 123-4567'}
-                  {recipient.type === 'STELLAR' && 'G...'}
+                <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">
+                  {formatDestination(recipient)}
                 </TableCell>
                 <TableCell>
-                  {recipient.isDefault && <Badge variant="outline">Default</Badge>}
+                  {recipient.isDefault && <Badge variant="active">Default</Badge>}
                 </TableCell>
                 <TableCell className="text-right text-sm">
                   {new Date(recipient.createdAt).toLocaleDateString()}
@@ -121,11 +125,11 @@ export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => setEditId(recipient.id)}>
+                      <DropdownMenuItem onSelect={() => setEditRecipient(recipient)}>
                         <Edit3 className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => setDeleteId(recipient.id)}>
+                      <DropdownMenuItem onSelect={() => setDeleteRecipient(recipient)}>
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
                       </DropdownMenuItem>
@@ -147,16 +151,18 @@ export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps
         </Table>
       </div>
 
-      {editId && (
-        <EditRecipientDialog 
-          id={editId} 
-          onClose={() => setEditId(null)} 
+      {editRecipient && (
+        <EditRecipientDialog
+          recipient={editRecipient}
+          open
+          onOpenChange={(o) => { if (!o) setEditRecipient(null); }}
         />
       )}
-      {deleteId && (
-        <DeleteRecipientDialog 
-          id={deleteId} 
-          onClose={() => setDeleteId(null)} 
+      {deleteRecipient && (
+        <DeleteRecipientDialog
+          recipient={deleteRecipient}
+          open
+          onOpenChange={(o) => { if (!o) setDeleteRecipient(null); }}
         />
       )}
     </div>

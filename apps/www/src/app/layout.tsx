@@ -50,18 +50,18 @@ const jetMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Useroutr — Pay anything. Settle everywhere.",
+  title:
+    "Useroutr — Payouts to bank accounts & mobile money, settled on Stellar",
   description:
-    "Cross-chain stablecoin payment infrastructure built on Stellar. One SDK, one API, one dashboard for accepting payments and settling them where you want — managed wallets out of the box, self-custody when you want.",
+    "The payout platform for businesses paying Africa. Accept USDC from any major chain and deliver to bank accounts and mobile money in Nigeria — settled on Stellar, at a fraction of legacy cost.",
   keywords: [
-    "stablecoin payment processor",
-    "stellar payment gateway",
-    "crypto payment infrastructure",
-    "cross-chain payment API",
-    "USDC payment processing",
-    "MoneyGram API",
-    "stellar soroban payments",
-    "global payouts API",
+    "cross-border payouts",
+    "stablecoin payouts",
+    "Nigeria payout API",
+    "mobile money API",
+    "USDC to NGN",
+    "stellar payments",
+    "bulk disbursement API",
     "Useroutr",
   ],
   authors: [{ name: "Useroutr" }],
@@ -71,9 +71,10 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://useroutr.com"),
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Useroutr — Pay anything. Settle everywhere.",
+    title:
+      "Useroutr — Payouts to bank accounts & mobile money, settled on Stellar",
     description:
-      "Cross-chain stablecoin payment infrastructure built on Stellar. Settlement on-chain, managed wallets out of the box.",
+      "Accept USDC from any major chain and deliver to bank accounts and mobile money in Nigeria — settled on Stellar.",
     url: "https://useroutr.com",
     siteName: "Useroutr",
     images: [
@@ -81,7 +82,7 @@ export const metadata: Metadata = {
         url: "/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: "Useroutr — cross-chain stablecoin payments",
+        alt: "Useroutr — cross-border payouts settled on Stellar",
       },
     ],
     locale: "en_US",
@@ -89,9 +90,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Useroutr — Pay anything. Settle everywhere.",
+    title:
+      "Useroutr — Payouts to bank accounts & mobile money, settled on Stellar",
     description:
-      "Cross-chain stablecoin payment infrastructure built on Stellar.",
+      "The payout platform for businesses paying Africa. Settled on Stellar.",
     creator: "@useroutr",
     images: ["/twitter-image.jpg"],
   },

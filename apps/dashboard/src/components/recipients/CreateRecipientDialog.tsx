@@ -1,13 +1,19 @@
 "use client";
 
 import { useState, useTransition } from 'react';
-import { Button } from '@useroutr/ui';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
+import {
+  Button,
+  ShadDialog as Dialog, ShadDialogContent as DialogContent, ShadDialogDescription as DialogDescription,
+  ShadDialogFooter as DialogFooter, ShadDialogHeader as DialogHeader, ShadDialogTitle as DialogTitle,
+  ShadInput as Input,
+  ShadLabel as Label,
+  ShadSelect as Select, ShadSelectContent as SelectContent, ShadSelectItem as SelectItem,
+  ShadSelectTrigger as SelectTrigger, ShadSelectValue as SelectValue,
+  useToast,
+} from '@useroutr/ui';
 import { DestType } from '@useroutr/types';
+import { api } from '@/lib/api';
+import { RecipientDetailsFields, isRecipientDetailsComplete } from './RecipientDetailsFields';
 
 interface CreateRecipientDialogProps {
   open: boolean;
@@ -19,91 +25,33 @@ export function CreateRecipientDialog({ open, onOpenChange }: CreateRecipientDia
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState('');
   const [type, setType] = useState<DestType>('BANK_ACCOUNT');
-  const [details, setDetails] = useState<Record<string, any>>({});
+  const [details, setDetails] = useState<Record<string, any>>({ type: 'BANK_ACCOUNT' });
 
   const handleTypeChange = (value: DestType) => {
     setType(value);
-    setDetails({});
+    setDetails({ type: value });
   };
 
   const handleSubmit = () => {
     startTransition(async () => {
-      const res = await fetch('/api/v1/recipients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, type, details }),
-      });
-      
-      if (res.ok) {
-        toast({
-          title: "Recipient created",
-          description: `${name} has been saved.`,
-        });
+      try {
+        await api.post('/recipients', { name, type, details });
+        toast({ title: "Recipient created", message: `${name} has been saved.` }, "success");
         onOpenChange(false);
         setName('');
         setType('BANK_ACCOUNT');
-        setDetails({});
-        // Refetch recipients
+        setDetails({ type: 'BANK_ACCOUNT' });
         window.dispatchEvent(new CustomEvent('recipients:refetch'));
-      } else {
+      } catch (err) {
         toast({
           title: "Error",
-          description: "Failed to create recipient",
-          variant: "destructive",
-        });
+          message: err instanceof Error ? err.message : "Failed to create recipient",
+        }, "error");
       }
     });
   };
 
-  const renderDetailsForm = () => {
-    switch (type) {
-      case 'BANK_ACCOUNT':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="account-number">Account Number</Label>
-              <Input id="account-number" placeholder="123456789" />
-            </div>
-            <div>
-              <Label htmlFor="routing-number">Routing Number (optional)</Label>
-              <Input id="routing-number" placeholder="021000021" />
-            </div>
-            <div>
-              <Label htmlFor="bank-name">Bank Name</Label>
-              <Input id="bank-name" placeholder="Chase Bank" />
-            </div>
-            <div>
-              <Label htmlFor="country">Country</Label>
-              <Input id="country" placeholder="US" />
-            </div>
-          </div>
-        );
-      case 'CRYPTO_WALLET':
-        return (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="address">Wallet Address</Label>
-              <Input id="address" placeholder="0x..." />
-            </div>
-            <div>
-              <Label htmlFor="network">Network</Label>
-              <Select onValueChange={(value) => setDetails(prev => ({...prev, network: value}))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select network" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="stellar">Stellar</SelectItem>
-                  <SelectItem value="ethereum">Ethereum</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        );
-      // Add more type forms...
-      default:
-        return null;
-    }
-  };
+  const canSubmit = name.trim().length > 0 && isRecipientDetailsComplete(type, details);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -119,14 +67,14 @@ export function CreateRecipientDialog({ open, onOpenChange }: CreateRecipientDia
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
-              placeholder="John's Bank Account"
+              placeholder="Adaeze's GTBank account"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
           <div>
             <Label>Destination Type</Label>
-            <Select value={type} onValueChange={handleTypeChange as any}>
+            <Select value={type} onValueChange={(v) => handleTypeChange(v as DestType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -138,15 +86,14 @@ export function CreateRecipientDialog({ open, onOpenChange }: CreateRecipientDia
               </SelectContent>
             </Select>
           </div>
-          {renderDetailsForm()}
+          <RecipientDetailsFields type={type} value={details} onChange={setDetails} />
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleSubmit} disabled={isPending || !name.trim()}>
-            Create Recipient
+          <Button type="submit" onClick={handleSubmit} disabled={isPending || !canSubmit}>
+            {isPending ? 'Creating…' : 'Create Recipient'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

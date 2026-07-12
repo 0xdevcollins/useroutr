@@ -36,10 +36,10 @@ export function FinalCTA({ onWaitlistClick }: FinalCTAProps) {
           className="mx-auto max-w-[1000px] text-center"
         >
           <h2
-            className="text-[48px] leading-[0.98] tracking-[-0.045em] text-ink md:text-[96px] lg:text-[128px]"
+            className="text-[42px] leading-[0.98] tracking-[-0.045em] text-ink md:text-[80px] lg:text-[104px]"
             style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
           >
-            Start accepting payments{" "}
+            Build the corridor{" "}
             <span
               className="text-ink/85"
               style={{
@@ -50,13 +50,15 @@ export function FinalCTA({ onWaitlistClick }: FinalCTAProps) {
                 fontVariationSettings: '"opsz" 144, "SOFT" 50',
               }}
             >
-              today
+              with us
             </span>
             .
           </h2>
-          <p className="mx-auto mt-8 max-w-[560px] text-[17px] leading-relaxed text-ink/80 md:text-[20px]">
-            Open a Useroutr account in 60 seconds. No setup fees. Cancel anytime
-            — and your funds are always yours.
+          <p className="mx-auto mt-8 max-w-[600px] text-[17px] leading-relaxed text-ink/80 md:text-[20px]">
+            We&rsquo;re onboarding a small number of design partners. If your
+            business sends recurring payouts to Nigeria — marketplace sellers,
+            remote teams, creators, suppliers — we&rsquo;ll build the corridor
+            with you and lock your launch pricing.
           </p>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-3 md:gap-5">
@@ -69,31 +71,29 @@ export function FinalCTA({ onWaitlistClick }: FinalCTAProps) {
                   fontWeight: 600,
                 }}
               >
-                Open an account
+                Become a design partner
                 <ArrowRight className="size-4" strokeWidth={1.7} />
               </span>
             </button>
-            <Link
-              href="https://docs.useroutr.com"
-              target="_blank"
-              rel="noreferrer"
+            <a
+              href="mailto:founders@useroutr.com"
               className="group inline-flex items-center gap-1.5 px-3 text-[14px] text-ink/80 transition-colors hover:text-ink"
             >
-              <span className="link-underline">Read the docs</span>
+              <span className="link-underline">founders@useroutr.com</span>
               <ArrowUpRight
                 className="size-3.5 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                 strokeWidth={1.6}
               />
-            </Link>
+            </a>
           </div>
 
           <div className="mt-12 inline-flex items-center gap-2.5 rounded-full border border-ink/15 bg-ink/5 px-3.5 py-1.5 text-[11.5px] text-ink/80 backdrop-blur-sm">
-            <span className="size-1.5 rounded-full bg-[#1f6c43] pulse-soft" />
+            <span className="size-1.5 rounded-full bg-ink/60 pulse-soft" />
             <span
               className="uppercase tracking-[0.14em]"
               style={{ fontFamily: "var(--font-mono)" }}
             >
-              Live on Stellar mainnet
+              Building on Stellar · Launch corridor: Nigeria
             </span>
           </div>
         </motion.div>

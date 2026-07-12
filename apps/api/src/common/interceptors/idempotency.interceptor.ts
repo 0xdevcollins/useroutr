@@ -17,7 +17,7 @@ import { tap } from 'rxjs/operators';
 const HEADER_NAME = 'idempotency-key';
 const HEADER_MAX_LENGTH = 255;
 
-/** How long a successful response is replayable. Matches Stripe's window. */
+/** How long a successful response is replayable. */
 const CACHE_TTL_SECONDS = 60 * 60 * 24; // 24h
 
 /** Shape we persist per (owner, route, key). */
@@ -51,7 +51,6 @@ interface AuthedRequest extends Request {
  *  - On a hit, replays the original status + body. Cache window is 24h.
  *  - On a hit with a DIFFERENT request body, throws 422 — the integrator
  *    almost certainly has a bug (reusing a key with different params).
- *    Stripe behaves the same way.
  *  - Cache writes are fire-and-forget; a Redis blip should never fail the
  *    request itself, just degrade us to non-idempotent for the next retry.
  */

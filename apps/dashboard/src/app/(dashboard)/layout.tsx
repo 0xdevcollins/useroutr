@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider, SidebarRail } from "@useroutr/ui";
 import { useAuth } from "@/providers/AuthProvider";
+import { NotificationsProvider } from "@/providers/NotificationsProvider";
 import { useRefundEvents } from "@/hooks/useRefundEvents";
 
 export default function DashboardLayout({
@@ -37,16 +38,18 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="[--header-height:calc(--spacing(14))]">
-      <SidebarProvider className="flex flex-col">
-        <SiteHeader />
-        <div className="flex flex-1">
-          <AppSidebar variant="sidebar" collapsible="none" />
-          <SidebarInset>
-            <div className="flex-1 p-6">{children}</div>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    </div>
+    <NotificationsProvider>
+      <div className="[--header-height:calc(--spacing(14))]">
+        <SidebarProvider className="flex flex-col">
+          <SiteHeader />
+          <div className="flex flex-1">
+            <AppSidebar variant="sidebar" collapsible="none" />
+            <SidebarInset>
+              <div className="flex-1 p-6">{children}</div>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
+      </div>
+    </NotificationsProvider>
   );
 }
