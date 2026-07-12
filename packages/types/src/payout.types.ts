@@ -14,15 +14,21 @@ export interface Recipient {
 
 export interface Payout {
 	id: string;
-	merchantId?: string;
-	recipientId?: string; // new
-	recipientName?: string;
-	destination?: Record<string, any>;
-	amount: bigint | number | string;
-	currency?: string;
-	status?: string;
-	scheduledAt?: string;
-	completedAt?: string;
+	merchantId: string;
+	recipientId?: string | null;
+	recipientName: string;
+	destinationType: DestType;
+	destination: Record<string, any>;
+	amount: string;
+	currency: string;
+	status: PayoutStatus;
+	stellarTxHash: string | null;
+	scheduledAt: string | null;
+	completedAt: string | null;
+	failureReason: string | null;
+	batchId: string | null;
+	idempotencyKey: string | null;
+	createdAt: string;
 }
 
 export interface PayoutListResponse {

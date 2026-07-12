@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@useroutr/ui";
 import { Plus, Search } from "lucide-react";
@@ -7,6 +8,7 @@ import { RecipientsTable } from "@/components/recipients/RecipientsTable";
 import { CreateRecipientDialog } from "@/components/recipients/CreateRecipientDialog";
 
 export default function RecipientsPage() {
+  const [createOpen, setCreateOpen] = useState(false);
   const recipientsQuery = useQuery({
     queryKey: ["recipients"],
     queryFn: async () => {
@@ -23,7 +25,11 @@ export default function RecipientsPage() {
           Recipients
         </h2>
         <div className="flex items-center gap-2">
-          <CreateRecipientDialog />
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add recipient
+          </Button>
+          <CreateRecipientDialog open={createOpen} onOpenChange={setCreateOpen} />
           <Button variant="outline" size="sm">
             <Search className="h-4 w-4 mr-2" />
             Filter

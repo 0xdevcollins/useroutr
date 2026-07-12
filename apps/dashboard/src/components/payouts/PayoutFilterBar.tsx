@@ -87,9 +87,14 @@ export function PayoutFilterBar({
       </div>
       <div className="w-64">
         <DateRangePicker
-          value={selectedDateRange}
-          onValueChange={onDateRangeChange}
-          placeholder="Date range"
+          startDate={selectedDateRange?.from ? selectedDateRange.from.toISOString().slice(0, 10) : undefined}
+          endDate={selectedDateRange?.to ? selectedDateRange.to.toISOString().slice(0, 10) : undefined}
+          onStartChange={(d) =>
+            onDateRangeChange?.({ from: d ? new Date(d) : undefined, to: selectedDateRange?.to })
+          }
+          onEndChange={(d) =>
+            onDateRangeChange?.({ from: selectedDateRange?.from, to: d ? new Date(d) : undefined })
+          }
         />
       </div>
       {onBatchIdChange && (

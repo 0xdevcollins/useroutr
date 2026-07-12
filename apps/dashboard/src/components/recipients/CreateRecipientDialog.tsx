@@ -41,8 +41,8 @@ export function CreateRecipientDialog({ open, onOpenChange }: CreateRecipientDia
       if (res.ok) {
         toast({
           title: "Recipient created",
-          description: `${name} has been saved.`,
-        });
+          message: `${name} has been saved.`,
+        }, "success");
         onOpenChange(false);
         setName('');
         setType('BANK_ACCOUNT');
@@ -52,9 +52,8 @@ export function CreateRecipientDialog({ open, onOpenChange }: CreateRecipientDia
       } else {
         toast({
           title: "Error",
-          description: "Failed to create recipient",
-          variant: "destructive",
-        });
+          message: "Failed to create recipient",
+        }, "error");
       }
     });
   };

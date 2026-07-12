@@ -34,6 +34,7 @@ export interface PaymentLink {
 	usageCount: number;
 	expiresAt?: string;
 	url: string;
+	qrCodeUrl?: string | null;
 	createdAt: string;
 	updatedAt: string;
 }

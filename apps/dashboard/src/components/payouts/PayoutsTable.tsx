@@ -61,7 +61,7 @@ export function PayoutsTable({ data, isLoading }: PayoutsTableProps) {
                 <span className="font-mono">{payout.amount} {payout.currency}</span>
               </TableCell>
               <TableCell>
-                <Badge variant={payout.status === 'COMPLETED' ? 'default' : 'secondary'}>
+                <Badge variant={payout.status === 'COMPLETED' ? 'completed' : 'default'}>
                   {payout.status}
                 </Badge>
               </TableCell>

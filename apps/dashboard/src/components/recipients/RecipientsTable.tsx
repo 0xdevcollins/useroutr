@@ -86,7 +86,7 @@ export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps
                 </TableCell>
                 <TableCell className="font-medium">{recipient.name}</TableCell>
                 <TableCell>
-                  <Badge variant={recipient.type === 'BANK_ACCOUNT' ? 'default' : 'secondary'}>
+                  <Badge variant="default">
                     {recipient.type.replace('_', ' ').toUpperCase()}
                   </Badge>
                 </TableCell>
@@ -97,7 +97,7 @@ export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps
                   {recipient.type === 'STELLAR' && 'G...'}
                 </TableCell>
                 <TableCell>
-                  {recipient.isDefault && <Badge variant="outline">Default</Badge>}
+                  {recipient.isDefault && <Badge variant="active">Default</Badge>}
                 </TableCell>
                 <TableCell className="text-right text-sm">
                   {new Date(recipient.createdAt).toLocaleDateString()}
@@ -138,15 +138,17 @@ export function RecipientsTable({ data, total, isLoading }: RecipientsTableProps
       </div>
 
       {editId && (
-        <EditRecipientDialog 
-          id={editId} 
-          onClose={() => setEditId(null)} 
+        <EditRecipientDialog
+          id={editId}
+          open
+          onOpenChange={(o) => { if (!o) setEditId(null); }}
         />
       )}
       {deleteId && (
-        <DeleteRecipientDialog 
-          id={deleteId} 
-          onClose={() => setDeleteId(null)} 
+        <DeleteRecipientDialog
+          id={deleteId}
+          open
+          onOpenChange={(o) => { if (!o) setDeleteId(null); }}
         />
       )}
     </div>
