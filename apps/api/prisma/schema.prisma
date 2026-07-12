@@ -306,13 +306,35 @@ model Payout {
   failureReason   String?
   batchId         String?
   idempotencyKey  String?      @unique
+  recipientId     String?
   createdAt       DateTime     @default(now())
   merchant        Merchant     @relation(fields: [merchantId], references: [id])
+  recipient       Recipient?   @relation(fields: [recipientId], references: [id])
 
   @@index([merchantId])
   @@index([status])
   @@index([batchId])
   @@index([createdAt])
+  @@index([recipientId])
+}
+
+// Saved payout destination. Reconstructed to match migration
+// 20260625193826_update after a merge dropped the model definition.
+model Recipient {
+  id         String   @id @default(cuid())
+  merchantId String
+  name       String
+  type       DestType
+  details    Json
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  payouts    Payout[]
+
+  @@unique([merchantId, name])
+  @@index([merchantId])
+  @@index([type])
 }
 
 enum DestType {

@@ -334,30 +334,42 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
     const sourceAsset = 'native';
     const sourceAmount = payout.amount.toString();
 
-    const { paths } = await this.stellar.findStrictSendPaths({
-      sourceAsset,
-      sourceAmount,
-      destinationAssets: [destAsset],
-      destinationAccount: destAddress,
-    });
+    let txHash: string;
 
-    const bestPath = paths[0];
-    // Convert asset objects to the 'native' | 'CODE:issuer' strings parseAsset expects
-    const pathStrings: string[] = (bestPath?.path ?? []).map((a) =>
-      assetToString(a as AssetObject),
-    );
-    const destMin = (
-      parseFloat(bestPath?.destinationAmount ?? sourceAmount) * 0.99
-    ).toFixed(7);
+    if (sourceAsset === destAsset) {
+      // Same asset (e.g. XLM → XLM) — no conversion needed. A strict-send path
+      // query would be rejected by Horizon, so send a direct payment instead.
+      txHash = await this.stellar.sendPayment({
+        asset: sourceAsset,
+        amount: sourceAmount,
+        destinationAccount: destAddress,
+      });
+    } else {
+      const { paths } = await this.stellar.findStrictSendPaths({
+        sourceAsset,
+        sourceAmount,
+        destinationAssets: [destAsset],
+        destinationAccount: destAddress,
+      });
 
-    const txHash = await this.stellar.executePathPayment({
-      sourceAsset,
-      sourceAmount,
-      destinationAccount: destAddress,
-      destinationAsset: destAsset,
-      destinationMinAmount: destMin,
-      path: pathStrings,
-    });
+      const bestPath = paths[0];
+      // Convert asset objects to the 'native' | 'CODE:issuer' strings parseAsset expects
+      const pathStrings: string[] = (bestPath?.path ?? []).map((a) =>
+        assetToString(a as AssetObject),
+      );
+      const destMin = (
+        parseFloat(bestPath?.destinationAmount ?? sourceAmount) * 0.99
+      ).toFixed(7);
+
+      txHash = await this.stellar.executePathPayment({
+        sourceAsset,
+        sourceAmount,
+        destinationAccount: destAddress,
+        destinationAsset: destAsset,
+        destinationMinAmount: destMin,
+        path: pathStrings,
+      });
+    }
 
     const completed = await this.prisma.payout.update({
       where: { id: payout.id },
