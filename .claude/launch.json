@@ -2,17 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "www-dev",
-      "runtimeExecutable": "/Users/0xdevcollins/.nvm/versions/node/v24.12.0/bin/npm",
-      "runtimeArgs": ["run", "dev", "--workspace=www"],
-      "port": 3000
-    },
-    {
-      "name": "dashboard-dev",
-      "runtimeExecutable": "/Users/0xdevcollins/.nvm/versions/node/v24.12.0/bin/npm",
-      "runtimeArgs": ["run", "dev", "--workspace=dashboard"],
-      "port": 3001
+      "name": "www",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--workspace=www", "--", "-p", "3005"],
+      "port": 3005
     }
   ]
 }
-

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/site/Wordmark";
 import { BrandLogo } from "./BrandLogo";
-import { StatusPill } from "./StatusPill";
 import { BRAND_LOGOS } from "@/lib/brand-logos";
 
 type LinkItem = { label: string; href: string; external?: boolean };
@@ -12,40 +11,24 @@ const columns: { title: string; links: LinkItem[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Hosted checkout", href: "/products/hosted-checkout" },
-      { label: "Pay by link", href: "/products/pay-by-link" },
-      { label: "Invoices", href: "/products/invoicing" },
-      { label: "Global payouts", href: "/products/payouts" },
+      { label: "How it works", href: "/#how-it-works" },
       { label: "Pricing", href: "/pricing" },
+      {
+        label: "Become a design partner",
+        href: "mailto:founders@useroutr.com",
+      },
     ],
   },
   {
     title: "Developers",
     links: [
+      { label: "Docs", href: "https://docs.useroutr.com", external: true },
       {
         label: "API reference",
         href: "https://docs.useroutr.com",
         external: true,
       },
-      { label: "SDKs", href: "https://docs.useroutr.com/sdks", external: true },
-      {
-        label: "Webhooks",
-        href: "https://docs.useroutr.com/webhooks",
-        external: true,
-      },
-      { label: "Status", href: "https://status.useroutr.com", external: true },
-      { label: "Changelog", href: "/changelog" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "About", href: "/about" },
-      { label: "Blog", href: "/blog" },
-      { label: "Use cases", href: "/use-cases" },
-      { label: "Customers", href: "/customers" },
-      { label: "Press", href: "/press" },
-      { label: "Contact", href: "/contact" },
+      { label: "GitHub", href: "https://github.com/useroutr", external: true },
     ],
   },
   {
@@ -53,8 +36,6 @@ const columns: { title: string; links: LinkItem[] }[] = [
     links: [
       { label: "Terms", href: "/terms" },
       { label: "Privacy", href: "/privacy" },
-      { label: "Security", href: "/security" },
-      { label: "Compliance", href: "/compliance" },
     ],
   },
 ];
@@ -80,18 +61,17 @@ export function Footer() {
               <Wordmark className="h-7" />
             </Link>
             <p className="mt-5 max-w-[320px] text-[14px] leading-relaxed text-ink-2">
-              Cross-chain stablecoin payment infrastructure. Built on
-              Stellar.{" "}
+              The payout platform for businesses paying Africa.{" "}
               <span className="text-ink">
-                Settlement on-chain, managed wallets out of the box.
+                Any chain in, local rails out — settled on Stellar.
               </span>
             </p>
             <a
-              href="mailto:hello@useroutr.com"
+              href="mailto:founders@useroutr.com"
               className="mt-5 inline-block text-[13px] text-ink-3 underline decoration-rule-2 decoration-from-font underline-offset-4 transition hover:text-ink"
               style={{ fontFamily: "var(--font-mono)" }}
             >
-              hello@useroutr.com
+              founders@useroutr.com
             </a>
           </div>
 
@@ -129,14 +109,17 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div className="mt-16 flex flex-col gap-4 border-t border-rule pt-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <span
               className="text-[12px] text-ink-3"
               style={{ fontFamily: "var(--font-mono)" }}
             >
-              © {new Date().getFullYear()} Useroutr Labs, Inc.
+              © {new Date().getFullYear()} Useroutr
             </span>
-            <StatusPill />
+            <span className="max-w-[440px] text-[12px] leading-relaxed text-ink-4">
+              Useroutr is a software platform; fiat payout services are provided
+              by licensed partners.
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             {socials.map((s) => {

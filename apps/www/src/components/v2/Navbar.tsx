@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight, ArrowUpRight, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { APP_ROUTES } from "@/lib/config";
 import { Wordmark } from "@/components/site/Wordmark";
 
 interface NavbarProps {
@@ -12,10 +11,8 @@ interface NavbarProps {
 }
 
 const links = [
-  { label: "Product", href: "/#product" },
-  { label: "Use cases", href: "/use-cases" },
-  { label: "Pricing", href: "/#pricing" },
-  { label: "Company", href: "/#company" },
+  { label: "How it works", href: "/#how-it-works" },
+  { label: "Pricing", href: "/pricing" },
 ];
 
 export function Navbar({ onWaitlistClick }: NavbarProps) {
@@ -75,19 +72,13 @@ export function Navbar({ onWaitlistClick }: NavbarProps) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link
-            href={APP_ROUTES.login()}
-            className="hidden rounded-full px-4 py-2 text-[14px] text-ink-2 transition-colors hover:text-ink md:inline-flex"
-          >
-            Sign in
-          </Link>
           <button
             type="button"
             onClick={onWaitlistClick}
             className="hidden md:inline-flex"
           >
             <span className="pill pill-accent">
-              Get started
+              Become a design partner
               <ArrowRight className="size-4" strokeWidth={1.6} />
             </span>
           </button>
@@ -125,13 +116,6 @@ export function Navbar({ onWaitlistClick }: NavbarProps) {
               Docs
               <ArrowUpRight className="size-4 text-ink-3" strokeWidth={1.6} />
             </Link>
-            <Link
-              href={APP_ROUTES.login()}
-              onClick={() => setOpen(false)}
-              className="rounded-md px-2 py-3 text-lg text-ink-3"
-            >
-              Sign in
-            </Link>
             <button
               type="button"
               onClick={() => {
@@ -141,7 +125,7 @@ export function Navbar({ onWaitlistClick }: NavbarProps) {
               className="mt-3"
             >
               <span className="pill pill-accent w-full justify-center">
-                Get started
+                Become a design partner
                 <ArrowRight className="size-4" strokeWidth={1.6} />
               </span>
             </button>
