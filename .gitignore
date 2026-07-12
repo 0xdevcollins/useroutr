@@ -4,7 +4,8 @@ dist
 # Rust / Cargo
 target
 **/target
-Cargo.lock
+# Cargo.lock IS committed for the contracts workspace — it pins dependency
+# resolution so CI (cargo test --locked) builds reproducibly.
 
 # Local environment files
 .env
