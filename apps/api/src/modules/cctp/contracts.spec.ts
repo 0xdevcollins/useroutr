@@ -102,7 +102,7 @@ describe('cctp/contracts', () => {
   });
 
   describe('IRIS_BASE_URL', () => {
-    it('uses Circle\'s documented hostnames', () => {
+    it("uses Circle's documented hostnames", () => {
       expect(IRIS_BASE_URL.mainnet).toBe('https://iris-api.circle.com');
       expect(IRIS_BASE_URL.testnet).toBe('https://iris-api-sandbox.circle.com');
     });

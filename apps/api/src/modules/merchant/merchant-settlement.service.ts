@@ -40,9 +40,8 @@ export class MerchantSettlementService {
     private readonly config: ConfigService,
   ) {
     const network =
-      (this.config.get<string>('STELLAR_NETWORK') as
-        | 'testnet'
-        | 'mainnet') ?? 'testnet';
+      (this.config.get<string>('STELLAR_NETWORK') as 'testnet' | 'mainnet') ??
+      'testnet';
     this.isTestnet = network !== 'mainnet';
     this.networkPassphrase = this.isTestnet
       ? StellarSdk.Networks.TESTNET
@@ -217,7 +216,10 @@ export class MerchantSettlementService {
     const kek = this.requireKek();
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', kek, iv);
-    const ciphertext = Buffer.concat([cipher.update(seed, 'utf8'), cipher.final()]);
+    const ciphertext = Buffer.concat([
+      cipher.update(seed, 'utf8'),
+      cipher.final(),
+    ]);
     const authTag = cipher.getAuthTag();
     return {
       ciphertext: ciphertext.toString('hex'),

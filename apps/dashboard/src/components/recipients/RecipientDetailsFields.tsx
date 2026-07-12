@@ -11,7 +11,7 @@ import {
 } from "@useroutr/ui";
 import { DestType } from "@useroutr/types";
 
-type Details = Record<string, any>;
+type Details = Record<string, string | undefined>;
 
 interface RecipientDetailsFieldsProps {
   type: DestType;

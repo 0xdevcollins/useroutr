@@ -199,13 +199,11 @@ describe('PaymentsService', () => {
 
     expect(prisma.payment.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: expect.objectContaining({ status: 'COMPLETED' }),
       }),
     );
     expect(prisma.webhookEvent.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: expect.objectContaining({ eventType: 'payment.completed' }),
       }),
     );
@@ -255,7 +253,6 @@ describe('PaymentsService', () => {
       expect(linksService.resolve).toHaveBeenCalledWith('aBcDeFgH');
       expect(prisma.payment.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           data: expect.objectContaining({
             merchantId: 'merchant_123',
             status: 'PENDING',

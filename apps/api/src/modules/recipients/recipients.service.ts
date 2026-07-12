@@ -14,7 +14,10 @@ import { Prisma } from '@prisma/client';
 export class RecipientsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(merchantId: string, dto: CreateRecipientDto): Promise<Recipient> {
+  async create(
+    merchantId: string,
+    dto: CreateRecipientDto,
+  ): Promise<Recipient> {
     // Check unique name per merchant
     const existing = await this.prisma.recipient.findUnique({
       where: {
@@ -23,7 +26,9 @@ export class RecipientsService {
     });
 
     if (existing) {
-      throw new BadRequestException('Recipient name must be unique per merchant');
+      throw new BadRequestException(
+        'Recipient name must be unique per merchant',
+      );
     }
 
     const recipient = await this.prisma.recipient.create({
@@ -80,7 +85,11 @@ export class RecipientsService {
     return recipient;
   }
 
-  async update(id: string, merchantId: string, dto: UpdateRecipientDto): Promise<Recipient> {
+  async update(
+    id: string,
+    merchantId: string,
+    dto: UpdateRecipientDto,
+  ): Promise<Recipient> {
     const recipient = await this.getById(id, merchantId);
 
     // Check unique name if changing name
@@ -91,7 +100,9 @@ export class RecipientsService {
         },
       });
       if (nameConflict) {
-        throw new BadRequestException('Recipient name must be unique per merchant');
+        throw new BadRequestException(
+          'Recipient name must be unique per merchant',
+        );
       }
     }
 
@@ -107,7 +118,8 @@ export class RecipientsService {
   }
 
   async delete(id: string, merchantId: string): Promise<void> {
-    const recipient = await this.getById(id, merchantId);
+    // Throws NotFound if the recipient doesn't belong to this merchant.
+    await this.getById(id, merchantId);
 
     // Prevent deletion if referenced by payouts
     const payoutCount = await this.prisma.payout.count({
@@ -122,4 +134,3 @@ export class RecipientsService {
     });
   }
 }
-

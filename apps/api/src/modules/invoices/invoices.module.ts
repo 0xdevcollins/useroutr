@@ -3,7 +3,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 import { PdfService } from './pdf.service';
-import { InvoicesReminderProcessor, INVOICE_REMINDER_QUEUE } from './invoices.reminder.processor';
+import {
+  InvoicesReminderProcessor,
+  INVOICE_REMINDER_QUEUE,
+} from './invoices.reminder.processor';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { NotificationsModule } from '../notifications/notifications.module';

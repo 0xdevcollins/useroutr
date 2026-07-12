@@ -26,7 +26,7 @@ export function EditRecipientDialog({ recipient, open = true, onOpenChange }: Ed
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(recipient.name);
   const [type, setType] = useState<DestType>(recipient.type);
-  const [details, setDetails] = useState<Record<string, any>>({
+  const [details, setDetails] = useState<Record<string, string | undefined>>({
     ...(recipient.details ?? {}),
     type: recipient.type,
   });

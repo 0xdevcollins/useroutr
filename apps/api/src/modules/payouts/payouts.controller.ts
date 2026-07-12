@@ -11,8 +11,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PayoutsService } from './payouts.service';
-import { CreatePayoutSchema, CreatePayoutDto, BulkPayoutSchema, BulkPayoutDto } from './dto/create-payout.dto';
-import { PayoutFiltersSchema, PayoutFiltersDto } from './dto/payout-filters.dto';
+import {
+  CreatePayoutSchema,
+  CreatePayoutDto,
+  BulkPayoutSchema,
+  BulkPayoutDto,
+} from './dto/create-payout.dto';
+import {
+  PayoutFiltersSchema,
+  PayoutFiltersDto,
+} from './dto/payout-filters.dto';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -50,7 +58,8 @@ export class PayoutsController {
   @UseGuards(JwtAuthGuard)
   async list(
     @CurrentMerchant('id') merchantId: string,
-    @Query(new ZodValidationPipe(PayoutFiltersSchema)) filters: PayoutFiltersDto,
+    @Query(new ZodValidationPipe(PayoutFiltersSchema))
+    filters: PayoutFiltersDto,
   ) {
     return this.payoutsService.list(merchantId, filters);
   }

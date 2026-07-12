@@ -49,8 +49,11 @@ export function SuccessPageClient({ params }: SuccessPageClientProps) {
   const merchantName = payment?.merchant?.name || "Merchant";
   const amount = payment?.amount || 0;
   const currency = payment?.currency || "USD";
-  const redirectUrl = (payment?.metadata as any)?.redirect_url;
-  const receiptEmail = (payment?.metadata as any)?.receipt_email;
+  const metadata = payment?.metadata as
+    | { redirect_url?: string; receipt_email?: string }
+    | undefined;
+  const redirectUrl = metadata?.redirect_url;
+  const receiptEmail = metadata?.receipt_email;
 
   return (
     <div className="flex min-h-screen justify-center bg-muted/30 px-4 py-8 sm:px-8">

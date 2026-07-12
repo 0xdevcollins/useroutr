@@ -145,38 +145,38 @@ function makePrisma(): FakePrisma {
         return row;
       }),
 
-      findUnique: jest.fn(async (args: { where: { id?: string; shortCode?: string } }) => {
-        if (args.where.id) return links.get(args.where.id) ?? null;
-        if (args.where.shortCode) {
-          for (const l of links.values()) {
-            if (l.shortCode === args.where.shortCode) {
-              return {
-                ...l,
-                merchant: {
-                  name: 'Acme Co',
-                  companyName: 'Acme Inc.',
-                  logoUrl: 'https://cdn.example.com/acme-logo.png',
-                  brandColor: '#ff5b1f',
-                },
-              };
+      findUnique: jest.fn(
+        async (args: { where: { id?: string; shortCode?: string } }) => {
+          if (args.where.id) return links.get(args.where.id) ?? null;
+          if (args.where.shortCode) {
+            for (const l of links.values()) {
+              if (l.shortCode === args.where.shortCode) {
+                return {
+                  ...l,
+                  merchant: {
+                    name: 'Acme Co',
+                    companyName: 'Acme Inc.',
+                    logoUrl: 'https://cdn.example.com/acme-logo.png',
+                    brandColor: '#ff5b1f',
+                  },
+                };
+              }
             }
           }
-        }
-        return null;
-      }),
+          return null;
+        },
+      ),
 
-      findFirst: jest.fn(async (args: { where: { id: string; merchantId: string } }) => {
-        const l = links.get(args.where.id);
-        if (l && l.merchantId === args.where.merchantId) return l;
-        return null;
-      }),
+      findFirst: jest.fn(
+        async (args: { where: { id: string; merchantId: string } }) => {
+          const l = links.get(args.where.id);
+          if (l && l.merchantId === args.where.merchantId) return l;
+          return null;
+        },
+      ),
 
       findMany: jest.fn(
-        async (args: {
-          where: WhereClause;
-          skip?: number;
-          take?: number;
-        }) => {
+        async (args: { where: WhereClause; skip?: number; take?: number }) => {
           const all = Array.from(links.values()).filter((l) =>
             matchesWhere(l, args.where),
           );
@@ -192,26 +192,14 @@ function makePrisma(): FakePrisma {
         ).length;
       }),
 
-      update: jest.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
-        const l = links.get(args.where.id);
-        if (!l) throw new Error('not found');
-        // Handle viewCount/usedCount increment objects
-        for (const [k, v] of Object.entries(args.data)) {
-          const inc = (v as { increment?: number })?.increment;
-          if (typeof inc === 'number') {
-            (l as unknown as Record<string, number>)[k] =
-              ((l as unknown as Record<string, number>)[k] ?? 0) + inc;
-          } else {
-            (l as unknown as Record<string, unknown>)[k] = v;
-          }
-        }
-        return l;
-      }),
-
-      updateMany: jest.fn(async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-        let count = 0;
-        for (const l of links.values()) {
-          if (!matchesUpdateManyWhere(l, args.where)) continue;
+      update: jest.fn(
+        async (args: {
+          where: { id: string };
+          data: Record<string, unknown>;
+        }) => {
+          const l = links.get(args.where.id);
+          if (!l) throw new Error('not found');
+          // Handle viewCount/usedCount increment objects
           for (const [k, v] of Object.entries(args.data)) {
             const inc = (v as { increment?: number })?.increment;
             if (typeof inc === 'number') {
@@ -221,24 +209,51 @@ function makePrisma(): FakePrisma {
               (l as unknown as Record<string, unknown>)[k] = v;
             }
           }
-          count++;
-        }
-        return { count };
-      }),
+          return l;
+        },
+      ),
+
+      updateMany: jest.fn(
+        async (args: {
+          where: Record<string, unknown>;
+          data: Record<string, unknown>;
+        }) => {
+          let count = 0;
+          for (const l of links.values()) {
+            if (!matchesUpdateManyWhere(l, args.where)) continue;
+            for (const [k, v] of Object.entries(args.data)) {
+              const inc = (v as { increment?: number })?.increment;
+              if (typeof inc === 'number') {
+                (l as unknown as Record<string, number>)[k] =
+                  ((l as unknown as Record<string, number>)[k] ?? 0) + inc;
+              } else {
+                (l as unknown as Record<string, unknown>)[k] = v;
+              }
+            }
+            count++;
+          }
+          return { count };
+        },
+      ),
     },
 
     payment: {
-      findMany: jest.fn(async (args: { where: { linkId: string; status: string } }) => {
-        return Array.from(payments.values()).filter(
-          (p) => p.linkId === args.where.linkId && p.status === args.where.status,
-        );
-      }),
-      update: jest.fn(async (args: { where: { id: string }; data: { linkId: string } }) => {
-        const p = payments.get(args.where.id);
-        if (!p) throw new Error('payment not found');
-        p.linkId = args.data.linkId;
-        return p;
-      }),
+      findMany: jest.fn(
+        async (args: { where: { linkId: string; status: string } }) => {
+          return Array.from(payments.values()).filter(
+            (p) =>
+              p.linkId === args.where.linkId && p.status === args.where.status,
+          );
+        },
+      ),
+      update: jest.fn(
+        async (args: { where: { id: string }; data: { linkId: string } }) => {
+          const p = payments.get(args.where.id);
+          if (!p) throw new Error('payment not found');
+          p.linkId = args.data.linkId;
+          return p;
+        },
+      ),
     },
 
     webhookEvent: {
@@ -265,13 +280,15 @@ function matchesUpdateManyWhere(
   if (where.merchantId !== undefined && link.merchantId !== where.merchantId)
     return false;
   if (Array.isArray(where.OR)) {
-    const anyMatch = (where.OR as Array<Record<string, unknown>>).some((cond) => {
-      if (cond.singleUse !== undefined && link.singleUse !== cond.singleUse)
-        return false;
-      if (cond.usedCount !== undefined && link.usedCount !== cond.usedCount)
-        return false;
-      return true;
-    });
+    const anyMatch = (where.OR as Array<Record<string, unknown>>).some(
+      (cond) => {
+        if (cond.singleUse !== undefined && link.singleUse !== cond.singleUse)
+          return false;
+        if (cond.usedCount !== undefined && link.usedCount !== cond.usedCount)
+          return false;
+        return true;
+      },
+    );
     if (!anyMatch) return false;
   }
   return true;
@@ -298,7 +315,9 @@ describe('LinksService', () => {
       });
 
       expect(result.id).toMatch(/^lnk_/);
-      expect(result.url).toMatch(/^https:\/\/pay\.useroutr\.com\/[A-Za-z0-9]{8}$/);
+      expect(result.url).toMatch(
+        /^https:\/\/pay\.useroutr\.com\/[A-Za-z0-9]{8}$/,
+      );
       expect(result.amount).toBe(49);
       expect(result.currency).toBe('USD');
       expect(result.qrCodeUrl).toBe('data:image/png;base64,QR');
@@ -335,9 +354,9 @@ describe('LinksService', () => {
     });
 
     it('throws NotFoundException when the link does not exist', async () => {
-      await expect(service.getById('merchant_1', 'missing')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.getById('merchant_1', 'missing'),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('throws NotFoundException when the link belongs to a different merchant (no leak)', async () => {
@@ -356,10 +375,16 @@ describe('LinksService', () => {
   describe('getByMerchant', () => {
     it('paginates and returns meta correctly', async () => {
       for (let i = 0; i < 25; i++) {
-        await service.create('merchant_1', { currency: 'USD', single_use: false });
+        await service.create('merchant_1', {
+          currency: 'USD',
+          single_use: false,
+        });
       }
 
-      const page1 = await service.getByMerchant('merchant_1', { page: 1, limit: 10 });
+      const page1 = await service.getByMerchant('merchant_1', {
+        page: 1,
+        limit: 10,
+      });
       expect(page1.data).toHaveLength(10);
       expect(page1.meta).toEqual({
         page: 1,
@@ -368,7 +393,10 @@ describe('LinksService', () => {
         totalPages: 3,
       });
 
-      const page3 = await service.getByMerchant('merchant_1', { page: 3, limit: 10 });
+      const page3 = await service.getByMerchant('merchant_1', {
+        page: 3,
+        limit: 10,
+      });
       expect(page3.data).toHaveLength(5);
     });
 
@@ -384,7 +412,10 @@ describe('LinksService', () => {
         currency: 'USD',
         single_use: false,
       });
-      await service.create('merchant_1', { currency: 'USD', single_use: false });
+      await service.create('merchant_1', {
+        currency: 'USD',
+        single_use: false,
+      });
       await service.deactivate('merchant_1', a.id.slice(4));
 
       const result = await service.getByMerchant('merchant_1', {
@@ -624,9 +655,9 @@ describe('LinksService', () => {
         single_use: false,
       });
       const raw = created.id.slice(4);
-      await expect(
-        service.getStats('merchant_B', raw),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getStats('merchant_B', raw)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 

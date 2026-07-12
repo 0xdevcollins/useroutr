@@ -59,9 +59,9 @@ describe('cctp/RouterService.findRoute', () => {
     });
 
     it('same chain on both sides falls through (not cctp_v2)', () => {
-      expect(router.findRoute('ethereum', 'ethereum', 'USDC').provider).not.toBe(
-        'cctp_v2',
-      );
+      expect(
+        router.findRoute('ethereum', 'ethereum', 'USDC').provider,
+      ).not.toBe('cctp_v2');
     });
 
     it('disabled chain in registry falls through (Solana registered but disabled)', () => {

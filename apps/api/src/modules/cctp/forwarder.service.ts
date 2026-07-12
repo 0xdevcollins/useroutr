@@ -136,7 +136,9 @@ function assertStellarStrkey(recipient: string): void {
       `expected Stellar strkey (56 chars), got: ${recipient.slice(0, 16)}…`,
     );
   }
-  if (!STRKEY_PREFIXES.includes(recipient[0] as (typeof STRKEY_PREFIXES)[number])) {
+  if (
+    !STRKEY_PREFIXES.includes(recipient[0] as (typeof STRKEY_PREFIXES)[number])
+  ) {
     throw new Error(
       `Stellar strkey must start with G, C, or M; got: ${recipient[0]}`,
     );

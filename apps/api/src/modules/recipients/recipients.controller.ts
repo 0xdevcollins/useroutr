@@ -12,8 +12,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { RecipientsService } from './recipients.service';
-import { CreateRecipientDto, CreateRecipientSchema } from './dto/create-recipient.dto';
-import { RecipientFiltersDto, RecipientFiltersSchema } from './dto/recipient-filters.dto';
+import {
+  CreateRecipientDto,
+  CreateRecipientSchema,
+} from './dto/create-recipient.dto';
+import {
+  RecipientFiltersDto,
+  RecipientFiltersSchema,
+} from './dto/recipient-filters.dto';
 import { UpdateRecipientDto } from './dto/update-recipient.dto';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';

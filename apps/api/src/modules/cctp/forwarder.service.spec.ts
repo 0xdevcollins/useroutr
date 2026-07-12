@@ -47,7 +47,10 @@ describe('ForwarderService', () => {
     it('accepts contract strkey (C...) the same way', () => {
       const svc = new ForwarderService(makeConfig());
       const strkey = 'CBZL2IH7F6BIDAA3WBNXYKIXSATJGMSW7K5P5MJ6STX5RXN47TZJDF5T';
-      const buf = Buffer.from(svc.encodeStellarForwardHook(strkey).slice(2), 'hex');
+      const buf = Buffer.from(
+        svc.encodeStellarForwardHook(strkey).slice(2),
+        'hex',
+      );
       expect(buf.readUInt32BE(28)).toBe(56);
       expect(buf.slice(32).toString('utf8')).toBe(strkey);
     });
@@ -55,7 +58,9 @@ describe('ForwarderService', () => {
     it('rejects EVM addresses', () => {
       const svc = new ForwarderService(makeConfig());
       expect(() =>
-        svc.encodeStellarForwardHook('0xdeadbeef00000000000000000000000000000000'),
+        svc.encodeStellarForwardHook(
+          '0xdeadbeef00000000000000000000000000000000',
+        ),
       ).toThrow(/Stellar strkey/);
     });
 

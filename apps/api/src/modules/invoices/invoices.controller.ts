@@ -15,14 +15,20 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { InvoicesService } from './invoices.service';
-import { CreateInvoiceSchema, CreateInvoiceDto } from './dto/create-invoice.dto';
+import {
+  CreateInvoiceSchema,
+  CreateInvoiceDto,
+} from './dto/create-invoice.dto';
 import {
   UpdateInvoiceSchema,
   UpdateInvoiceDto,
   RecordPaymentSchema,
   RecordPaymentDto,
 } from './dto/update-invoice.dto';
-import { InvoiceFiltersSchema, InvoiceFiltersDto } from './dto/invoice-filters.dto';
+import {
+  InvoiceFiltersSchema,
+  InvoiceFiltersDto,
+} from './dto/invoice-filters.dto';
 import { SendInvoiceSchema, SendInvoiceDto } from './dto/send-invoice.dto';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -56,7 +62,8 @@ export class InvoicesController {
   @UseGuards(JwtAuthGuard)
   async list(
     @CurrentMerchant('id') merchantId: string,
-    @Query(new ZodValidationPipe(InvoiceFiltersSchema)) filters: InvoiceFiltersDto,
+    @Query(new ZodValidationPipe(InvoiceFiltersSchema))
+    filters: InvoiceFiltersDto,
   ) {
     return this.invoicesService.list(merchantId, filters);
   }

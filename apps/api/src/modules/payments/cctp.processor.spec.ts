@@ -30,15 +30,15 @@ describe('CctpProcessor', () => {
   const queue = { add: jest.fn() };
   const prisma = {};
 
-  function makeJob(
-    overrides: Partial<CctpObserveJobData> = {},
-  ): { name: string; data: CctpObserveJobData } {
+  function makeJob(overrides: Partial<CctpObserveJobData> = {}): {
+    name: string;
+    data: CctpObserveJobData;
+  } {
     return {
       name: CCTP_OBSERVE_JOB,
       data: {
         paymentId: 'pay_123',
-        sourceTxHash:
-          '0x' + 'a'.repeat(64),
+        sourceTxHash: '0x' + 'a'.repeat(64),
         sourceChain: 'base',
         attempt: 1,
         ...overrides,
@@ -108,9 +108,9 @@ describe('CctpProcessor', () => {
   it('re-enqueues with backoff when observe fails and retries remain', async () => {
     cctpService.observe.mockRejectedValue(new Error('iris timeout'));
 
-    await expect(processor.process(makeJob({ attempt: 1 }) as never)).rejects.toThrow(
-      /iris timeout/,
-    );
+    await expect(
+      processor.process(makeJob({ attempt: 1 }) as never),
+    ).rejects.toThrow(/iris timeout/);
 
     expect(queue.add).toHaveBeenCalledWith(
       CCTP_OBSERVE_JOB,
@@ -125,7 +125,9 @@ describe('CctpProcessor', () => {
   });
 
   it('transitions to FAILED with cctpError when retries are exhausted', async () => {
-    cctpService.observe.mockRejectedValue(new Error('attestation never settled'));
+    cctpService.observe.mockRejectedValue(
+      new Error('attestation never settled'),
+    );
 
     await expect(
       processor.process(makeJob({ attempt: CCTP_MAX_ATTEMPTS }) as never),
@@ -136,7 +138,6 @@ describe('CctpProcessor', () => {
       'pay_123',
       PaymentStatus.FAILED,
       expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         metadata: expect.objectContaining({
           cctpError: 'attestation never settled',
         }),

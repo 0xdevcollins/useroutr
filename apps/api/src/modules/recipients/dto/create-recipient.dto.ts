@@ -49,4 +49,3 @@ export const CreateRecipientSchema = z.object({
 });
 
 export type CreateRecipientDto = z.infer<typeof CreateRecipientSchema>;
-

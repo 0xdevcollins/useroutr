@@ -681,8 +681,7 @@ export class InvoicesService {
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
 
-    const amountDue =
-      toNumber(invoice.total) - toNumber(invoice.amountPaid);
+    const amountDue = toNumber(invoice.total) - toNumber(invoice.amountPaid);
 
     if (amountDue <= 0) {
       throw new BadRequestException('Invoice balance is already settled');
@@ -720,7 +719,14 @@ export class InvoicesService {
     });
 
     const lineItems = Array.isArray(invoice.lineItems)
-      ? (invoice.lineItems as Array<{ description: string; qty: number; unitPrice: number; amount: number }>).map((li) => ({
+      ? (
+          invoice.lineItems as Array<{
+            description: string;
+            qty: number;
+            unitPrice: number;
+            amount: number;
+          }>
+        ).map((li) => ({
           label: li.description,
           amount: li.amount,
         }))

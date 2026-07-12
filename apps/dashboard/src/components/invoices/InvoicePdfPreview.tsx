@@ -134,7 +134,7 @@ export function InvoicePdfPreview({
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-foreground">PDF ready</p>
                   <p className="text-xs text-muted-foreground">
-                    PDF preview isn't available on small screens.
+                    PDF preview isn&apos;t available on small screens.
                   </p>
                 </div>
                 <div className="flex gap-2">

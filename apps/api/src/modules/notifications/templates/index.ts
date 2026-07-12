@@ -176,7 +176,8 @@ export const merchantPaymentNotificationTemplate = (payment: Payment) =>
 
 export const invoiceTemplate = (invoice: Invoice, appUrl: string) => {
   const brand = invoice.merchantBrandColor ?? '#000000';
-  const payUrl = invoice.checkoutUrl ?? `${appUrl}/pay/${encodeURIComponent(invoice.id)}`;
+  const payUrl =
+    invoice.checkoutUrl ?? `${appUrl}/pay/${encodeURIComponent(invoice.id)}`;
   const ctaButton = `
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
   <tr>
@@ -234,7 +235,8 @@ export const invoiceTemplate = (invoice: Invoice, appUrl: string) => {
 
 export const invoiceReminderTemplate = (invoice: Invoice, appUrl: string) => {
   const brand = invoice.merchantBrandColor ?? '#000000';
-  const payUrl = invoice.checkoutUrl ?? `${appUrl}/pay/${encodeURIComponent(invoice.id)}`;
+  const payUrl =
+    invoice.checkoutUrl ?? `${appUrl}/pay/${encodeURIComponent(invoice.id)}`;
   const ctaButton = `
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0;">
   <tr>

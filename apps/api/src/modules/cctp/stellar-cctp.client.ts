@@ -187,6 +187,8 @@ export class StellarCctpClient {
   async parseBurnEvent(txHash: string): Promise<ParsedStellarBurn | null> {
     const server = this.server();
     const result = await server.getTransaction(txHash);
+    // Narrows `result` to the SUCCESS variant so resultMetaXdr et al. are typed.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
     if (result.status !== 'SUCCESS') return null;
 
     // Soroban events live on the meta. For PR B we extract via the
