@@ -28,6 +28,12 @@ jobs:
 
       - run: npm ci
 
+      # Lint is type-aware; without the generated client, all Prisma types
+      # resolve to `error` and trip the no-unsafe-* rules across the API.
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+
       - name: Lint API
         working-directory: apps/api
         run: npm run lint
@@ -118,13 +124,16 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      # Cache only the immutable registry/git downloads. Caching `target/`
+      # across dependency or toolchain changes restores stale compiled
+      # artifacts, which surfaces as spurious trait-resolution errors
+      # (e.g. ChaCha20Rng: CryptoRng) on incremental recompile.
       - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            contract/soroban/target
           key: cargo-${{ runner.os }}-${{ hashFiles('contract/soroban/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
 
