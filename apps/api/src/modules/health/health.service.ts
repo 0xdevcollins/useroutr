@@ -3,10 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service.js';
-import {
-  IRIS_BASE_URL,
-  cctpEnvFromStellarNetwork,
-} from '../cctp/contracts.js';
+import { IRIS_BASE_URL, cctpEnvFromStellarNetwork } from '../cctp/contracts.js';
 
 /** Single check result — included in the /readyz response per dependency. */
 export interface CheckResult {
@@ -89,7 +86,9 @@ export class HealthService {
     return {
       ok: reply === 'PONG',
       latency_ms: Date.now() - start,
-      ...(reply !== 'PONG' ? { error: `unexpected reply: ${reply}` } : {}),
+      ...(reply !== 'PONG'
+        ? { error: `unexpected reply: ${String(reply)}` }
+        : {}),
     };
   }
 
@@ -233,12 +232,14 @@ export class HealthService {
  * Promise.allSettled returns a result per task. Map it into our
  * uniform `CheckResult` shape and stringify rejection reasons.
  */
-function settle(
-  result: PromiseSettledResult<CheckResult>,
-): CheckResult {
+function settle(result: PromiseSettledResult<CheckResult>): CheckResult {
   if (result.status === 'fulfilled') return result.value;
-  const reason = result.reason;
+  const reason: unknown = result.reason;
   const error =
-    reason instanceof Error ? reason.message : String(reason ?? 'unknown error');
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string'
+        ? reason
+        : 'unknown error';
   return { ok: false, error };
 }

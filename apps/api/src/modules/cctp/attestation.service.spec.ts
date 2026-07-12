@@ -56,9 +56,7 @@ describe('AttestationService', () => {
     it('decodes a "failed" response with error detail', async () => {
       globalThis.fetch = jest.fn(async () =>
         jsonResponse({
-          messages: [
-            { status: 'failed', errorMessage: 'attesters rejected' },
-          ],
+          messages: [{ status: 'failed', errorMessage: 'attesters rejected' }],
         }),
       ) as unknown as typeof fetch;
 
@@ -68,7 +66,7 @@ describe('AttestationService', () => {
       expect(result.error).toBe('attesters rejected');
     });
 
-    it('treats 404 as pending (Iris hasn\'t observed the tx yet)', async () => {
+    it("treats 404 as pending (Iris hasn't observed the tx yet)", async () => {
       globalThis.fetch = jest.fn(async () =>
         jsonResponse({ message: 'not found' }, 404),
       ) as unknown as typeof fetch;
@@ -120,7 +118,11 @@ describe('AttestationService', () => {
   describe('pollUntilReady', () => {
     it('returns immediately when the first poll comes back complete', async () => {
       globalThis.fetch = jest.fn(async () =>
-        jsonResponse({ messages: [{ status: 'complete', message: '0xm', attestation: '0xs' }] }),
+        jsonResponse({
+          messages: [
+            { status: 'complete', message: '0xm', attestation: '0xs' },
+          ],
+        }),
       ) as unknown as typeof fetch;
 
       const svc = new AttestationService(makeConfig());

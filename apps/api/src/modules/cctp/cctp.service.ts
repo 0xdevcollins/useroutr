@@ -2,22 +2,18 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StrKey } from '@stellar/stellar-sdk';
 import { AttestationService } from './attestation.service.js';
-import { EvmCctpClient, type EvmTransactionPayload } from './evm-cctp.client.js';
+import {
+  EvmCctpClient,
+  type EvmTransactionPayload,
+} from './evm-cctp.client.js';
 import { ForwarderService } from './forwarder.service.js';
 import {
   StellarCctpClient,
   type StellarTransactionPayload,
 } from './stellar-cctp.client.js';
 import { getDomain, enabledDomains } from './domains.js';
-import {
-  STELLAR_CCTP,
-  cctpEnvFromStellarNetwork,
-} from './contracts.js';
-import type {
-  AttestationResponse,
-  CctpTransferRecord,
-  CctpTransferRequest,
-} from './types.js';
+import { STELLAR_CCTP, cctpEnvFromStellarNetwork } from './contracts.js';
+import type { CctpTransferRecord, CctpTransferRequest } from './types.js';
 
 /**
  * High-level orchestrator for CCTP V2 transfers — the only surface PR C

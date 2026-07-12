@@ -25,7 +25,7 @@ export function CreateRecipientDialog({ open, onOpenChange }: CreateRecipientDia
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState('');
   const [type, setType] = useState<DestType>('BANK_ACCOUNT');
-  const [details, setDetails] = useState<Record<string, any>>({ type: 'BANK_ACCOUNT' });
+  const [details, setDetails] = useState<Record<string, string | undefined>>({ type: 'BANK_ACCOUNT' });
 
   const handleTypeChange = (value: DestType) => {
     setType(value);

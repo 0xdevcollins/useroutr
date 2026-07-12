@@ -21,7 +21,8 @@ export function ExpiredPageClient({ params }: ExpiredPageClientProps) {
 
   const merchantName = payment?.merchant?.name || "Merchant";
   const merchantLogo = payment?.merchant?.logo;
-  const redirectUrl = (payment?.metadata as any)?.return_url;
+  const redirectUrl = (payment?.metadata as { return_url?: string } | undefined)
+    ?.return_url;
 
   return (
     <div className="flex min-h-screen justify-center bg-muted/30 px-4 py-8 sm:px-8">

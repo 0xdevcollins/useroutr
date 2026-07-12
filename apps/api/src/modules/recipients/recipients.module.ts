@@ -11,4 +11,3 @@ import { AuthModule } from '../auth/auth.module';
   exports: [RecipientsService],
 })
 export class RecipientsModule {}
-

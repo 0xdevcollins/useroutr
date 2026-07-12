@@ -6,7 +6,6 @@ import {
   getEvmContracts,
   getUsdcAddress,
   type CctpEnv,
-  type EvmCctpContracts,
 } from './contracts.js';
 import { getDomain } from './domains.js';
 import type { CctpTransferRequest } from './types.js';
@@ -327,15 +326,6 @@ function encodeRecipientBytes32(
   throw new Error(
     `non-EVM destination recipients must be encoded by the calling client (got ${destinationChain})`,
   );
-}
-
-/** CCTP V2 EVM-side burn token is always USDC. */
-function tokenMinterToken(_contracts: EvmCctpContracts): string {
-  // Placeholder for an asset table; USDC EVM addresses are well-known
-  // per chain. PR C will lift this to a per-domain token registry.
-  // For now: caller patches `burnToken` after if the chain's USDC isn't
-  // baked in. Stub returns zero address so a real call will fail loudly.
-  return '0x' + '00'.repeat(20);
 }
 
 function formatUsdc(subunits: bigint): string {

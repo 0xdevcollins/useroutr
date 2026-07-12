@@ -60,12 +60,20 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
-function getStatusBadge(status: string): { label: string; color: string; bg: string } {
+function getStatusBadge(status: string): {
+  label: string;
+  color: string;
+  bg: string;
+} {
   const map: Record<string, { label: string; color: string; bg: string }> = {
     DRAFT: { label: 'Draft', color: '#6b7280', bg: '#f3f4f6' },
     SENT: { label: 'Sent', color: '#2563eb', bg: '#eff6ff' },
     VIEWED: { label: 'Viewed', color: '#7c3aed', bg: '#f5f3ff' },
-    PARTIALLY_PAID: { label: 'Partially Paid', color: '#d97706', bg: '#fffbeb' },
+    PARTIALLY_PAID: {
+      label: 'Partially Paid',
+      color: '#d97706',
+      bg: '#fffbeb',
+    },
     PAID: { label: 'Paid', color: '#059669', bg: '#ecfdf5' },
     OVERDUE: { label: 'Overdue', color: '#dc2626', bg: '#fef2f2' },
     CANCELLED: { label: 'Cancelled', color: '#9ca3af', bg: '#f9fafb' },

@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { NotificationsService } from './notifications.service';
 import { EmailJobData } from './types';
+import { PrismaService } from '../prisma/prisma.service';
+import { EventsService } from '../events/events/events.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -33,6 +35,22 @@ describe('NotificationsService', () => {
               return config[key] ?? defaultValue;
             }),
           },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            notification: {
+              create: jest.fn(),
+              findMany: jest.fn(),
+              update: jest.fn(),
+              updateMany: jest.fn(),
+              count: jest.fn(),
+            },
+          },
+        },
+        {
+          provide: EventsService,
+          useValue: { emitNotification: jest.fn(), emit: jest.fn() },
         },
       ],
     }).compile();

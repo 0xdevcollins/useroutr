@@ -50,7 +50,7 @@ export class PayoutsService {
 
   // ── Create single payout ──────────────────────────────────────────────────
 
-async create(
+  async create(
     merchantId: string,
     dto: CreatePayoutDto,
     idempotencyKey?: string,
@@ -62,7 +62,9 @@ async create(
       });
       if (existing) {
         if (existing.merchantId !== merchantId) {
-          throw new ConflictException('Idempotency key already used by another merchant');
+          throw new ConflictException(
+            'Idempotency key already used by another merchant',
+          );
         }
         return existing;
       }
@@ -82,7 +84,8 @@ async create(
         ...dto,
         recipientName: recipient.name,
         destinationType: recipient.type,
-        destination: recipient.details as unknown as CreatePayoutDto['destination'],
+        destination:
+          recipient.details as unknown as CreatePayoutDto['destination'],
       };
     }
 
@@ -102,7 +105,11 @@ async create(
     });
 
     this.webhooks
-      .dispatch(merchantId, 'payout.initiated', this.webhookPayload(payout) as Prisma.InputJsonValue)
+      .dispatch(
+        merchantId,
+        'payout.initiated',
+        this.webhookPayload(payout) as Prisma.InputJsonValue,
+      )
       .catch(() => undefined);
 
     // Process immediately unless scheduled for the future
@@ -115,7 +122,10 @@ async create(
 
   // ── Bulk payout ───────────────────────────────────────────────────────────
 
-async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResult> {
+  async createBulk(
+    merchantId: string,
+    dto: BulkPayoutDto,
+  ): Promise<BulkPayoutResult> {
     const batchId = randomUUID();
     const results: BulkPayoutResult['payouts'] = [];
     let accepted = 0;
@@ -132,13 +142,16 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
             where: { id: item.recipientId, merchantId },
           });
           if (!recipient) {
-            throw new NotFoundException(`Recipient ${item.recipientId} not found`);
+            throw new NotFoundException(
+              `Recipient ${item.recipientId} not found`,
+            );
           }
           finalItem = {
             ...item,
             recipientName: recipient.name,
             destinationType: recipient.type,
-            destination: recipient.details as unknown as CreatePayoutDto['destination'],
+            destination:
+              recipient.details as unknown as CreatePayoutDto['destination'],
           };
         }
 
@@ -180,7 +193,13 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
       } as Prisma.InputJsonValue)
       .catch(() => undefined);
 
-    return { batchId, total: dto.payouts.length, accepted, rejected, payouts: results };
+    return {
+      batchId,
+      total: dto.payouts.length,
+      accepted,
+      rejected,
+      payouts: results,
+    };
   }
 
   // ── List ──────────────────────────────────────────────────────────────────
@@ -189,7 +208,8 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
     const where: Prisma.PayoutWhereInput = { merchantId };
 
     if (filters.status) where.status = filters.status as PayoutStatus;
-    if (filters.destinationType) where.destinationType = filters.destinationType as DestType;
+    if (filters.destinationType)
+      where.destinationType = filters.destinationType as DestType;
     if (filters.currency) where.currency = filters.currency;
     if (filters.batchId) where.batchId = filters.batchId;
     if (filters.dateFrom || filters.dateTo) {
@@ -260,7 +280,11 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
     });
 
     this.webhooks
-      .dispatch(merchantId, 'payout.initiated', this.webhookPayload(reset) as Prisma.InputJsonValue)
+      .dispatch(
+        merchantId,
+        'payout.initiated',
+        this.webhookPayload(reset) as Prisma.InputJsonValue,
+      )
       .catch(() => undefined);
 
     this.processPayout(reset).catch(() => undefined);
@@ -291,7 +315,8 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
       // BANK_ACCOUNT and MOBILE_MONEY remain PROCESSING until external system
       // delivers and calls back to update the status.
     } catch (err) {
-      const failureReason = err instanceof Error ? err.message : 'Processing failed';
+      const failureReason =
+        err instanceof Error ? err.message : 'Processing failed';
       const failed = await this.prisma.payout.update({
         where: { id: payout.id },
         data: { status: PayoutStatus.FAILED, failureReason },
@@ -330,7 +355,8 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
     destination: Record<string, unknown>,
   ): Promise<void> {
     const destAddress = String(destination.address);
-    const destAsset = typeof destination.asset === 'string' ? destination.asset : 'native';
+    const destAsset =
+      typeof destination.asset === 'string' ? destination.asset : 'native';
     const sourceAsset = 'native';
     const sourceAmount = payout.amount.toString();
 
@@ -392,11 +418,7 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
       },
     );
     void this.notifications
-      .notifyPayoutCompleted(
-        payout.merchantId,
-        payout.id,
-        payout.recipientName,
-      )
+      .notifyPayoutCompleted(payout.merchantId, payout.id, payout.recipientName)
       .catch(() => undefined);
 
     this.webhooks
@@ -409,7 +431,7 @@ async createBulk(merchantId: string, dto: BulkPayoutDto): Promise<BulkPayoutResu
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-private formatResponse(payout: Payout) {
+  private formatResponse(payout: Payout) {
     return {
       id: payout.id,
       merchantId: payout.merchantId,

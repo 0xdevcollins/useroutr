@@ -1,6 +1,13 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import puppeteer from 'puppeteer';
-import { renderInvoiceHtml, InvoiceTemplateData } from './templates/invoice.template';
+import {
+  renderInvoiceHtml,
+  InvoiceTemplateData,
+} from './templates/invoice.template';
 
 @Injectable()
 export class PdfService {

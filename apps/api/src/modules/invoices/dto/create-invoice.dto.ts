@@ -16,9 +16,27 @@ export const LineItemSchema = z.object({
 });
 
 const SUPPORTED_CURRENCIES = [
-  'USD', 'EUR', 'GBP', 'NGN', 'KES', 'GHS', 'ZAR',
-  'CAD', 'AUD', 'JPY', 'CNY', 'INR', 'BRL', 'MXN',
-  'AED', 'SAR', 'SGD', 'HKD', 'CHF', 'SEK', 'NOK',
+  'USD',
+  'EUR',
+  'GBP',
+  'NGN',
+  'KES',
+  'GHS',
+  'ZAR',
+  'CAD',
+  'AUD',
+  'JPY',
+  'CNY',
+  'INR',
+  'BRL',
+  'MXN',
+  'AED',
+  'SAR',
+  'SGD',
+  'HKD',
+  'CHF',
+  'SEK',
+  'NOK',
 ] as const;
 
 export const CreateInvoiceSchema = z.object({
@@ -27,7 +45,9 @@ export const CreateInvoiceSchema = z.object({
   customerPhone: z.string().max(30).optional(),
   customerAddress: CustomerAddressSchema.optional(),
 
-  lineItems: z.array(LineItemSchema).min(1, 'At least one line item is required'),
+  lineItems: z
+    .array(LineItemSchema)
+    .min(1, 'At least one line item is required'),
 
   taxRate: z
     .number()
@@ -39,9 +59,15 @@ export const CreateInvoiceSchema = z.object({
   currency: z
     .string()
     .toUpperCase()
-    .refine((v) => SUPPORTED_CURRENCIES.includes(v as (typeof SUPPORTED_CURRENCIES)[number]), {
-      message: `Currency must be one of: ${SUPPORTED_CURRENCIES.join(', ')}`,
-    })
+    .refine(
+      (v) =>
+        SUPPORTED_CURRENCIES.includes(
+          v as (typeof SUPPORTED_CURRENCIES)[number],
+        ),
+      {
+        message: `Currency must be one of: ${SUPPORTED_CURRENCIES.join(', ')}`,
+      },
+    )
     .default('USD'),
 
   dueDate: z.coerce.date().optional(),

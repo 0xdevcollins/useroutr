@@ -30,7 +30,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   handleRequest<T = Merchant>(
     err: Error | null,
     user: T | false,
-    _info: unknown, // eslint-disable-line @typescript-eslint/no-unused-vars
+    _info: unknown,
   ): T {
     if (err || !user) {
       throw (

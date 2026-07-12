@@ -9,7 +9,14 @@ import { EventsModule } from '../events/events.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, WebhooksModule, StellarModule, AuthModule, EventsModule, NotificationsModule],
+  imports: [
+    PrismaModule,
+    WebhooksModule,
+    StellarModule,
+    AuthModule,
+    EventsModule,
+    NotificationsModule,
+  ],
   providers: [PayoutsService],
   controllers: [PayoutsController],
   exports: [PayoutsService],

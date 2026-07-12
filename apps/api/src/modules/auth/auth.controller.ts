@@ -86,18 +86,14 @@ export class AuthController {
   @Post('auth/resend-verification')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UsePipes(new ZodValidationPipe(ResendVerificationSchema))
-  async resendVerification(
-    @Body() dto: ResendVerificationDto,
-  ): Promise<void> {
+  async resendVerification(@Body() dto: ResendVerificationDto): Promise<void> {
     await this.authService.resendVerification(dto.email);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('auth/logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(
-    @CurrentMerchant('id') merchantId: string,
-  ): Promise<void> {
+  async logout(@CurrentMerchant('id') merchantId: string): Promise<void> {
     await this.authService.logout(merchantId);
   }
 

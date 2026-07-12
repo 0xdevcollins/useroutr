@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { InvoiceStatus, Prisma } from '@prisma/client';
+import { InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WebhooksService } from '../webhooks/webhooks.service';

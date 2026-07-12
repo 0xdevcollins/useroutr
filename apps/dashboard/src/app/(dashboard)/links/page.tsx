@@ -10,14 +10,30 @@ import { formatCurrency } from "@/lib/utils";
 
 import type { PaymentLink } from "@useroutr/types";
 
+interface LinkStats {
+  totalViews?: number;
+  totalPayments?: number;
+  conversionRate?: number;
+  totalRevenue?: number;
+  currency?: string;
+}
+
+interface LinkPayment {
+  id: string;
+  payer?: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
 export default function LinkDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
 
   const [link, setLink] = useState<PaymentLink | null>(null);
-  const [stats, setStats] = useState<any>(null);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [stats, setStats] = useState<LinkStats | null>(null);
+  const [payments, setPayments] = useState<LinkPayment[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function fetchData() {
@@ -42,7 +58,7 @@ export default function LinkDetailPage() {
       setLink(linkData);
       setStats(statsData);
       setPayments(paymentsData?.data ?? paymentsData ?? []);
-    } catch (err: any) {
+    } catch {
       toast(`Failed to load link`, "error");
     } finally {
       setLoading(false);
@@ -173,7 +189,7 @@ export default function LinkDetailPage() {
           </p>
         ) : (
           <div className="space-y-2">
-            {payments.slice(0, 10).map((p: any) => (
+            {payments.slice(0, 10).map((p) => (
               <Link
                 key={p.id}
                 href={`/payments/${p.id}`}

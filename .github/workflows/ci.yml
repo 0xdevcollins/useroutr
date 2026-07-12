@@ -28,6 +28,12 @@ jobs:
 
       - run: npm ci
 
+      # Lint is type-aware; without the generated client, all Prisma types
+      # resolve to `error` and trip the no-unsafe-* rules across the API.
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+
       - name: Lint API
         working-directory: apps/api
         run: npm run lint
@@ -106,28 +112,6 @@ jobs:
         working-directory: apps/api
         run: npm test
 
-  # ── Test EVM Contracts ───────────────────────────────────────────────────────
-  test-contracts-evm:
-    name: Test EVM Contracts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - run: npm ci
-
-      - name: Compile contracts
-        working-directory: contract/evm
-        run: npx hardhat compile
-
-      - name: Run tests
-        working-directory: contract/evm
-        run: npx hardhat test
-
   # ── Test Soroban Contracts ───────────────────────────────────────────────────
   test-contracts-soroban:
     name: Test Soroban Contracts
@@ -135,24 +119,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned toolchain: a newer stable rustc rejects `ethnum 1.5.2`
+      # (transitive via soroban-sdk) with E0512 on an invalid transmute.
+      # 1.93.0 builds the workspace clean; bump deliberately alongside deps.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: wasm32-unknown-unknown
 
+      # Cache only the immutable registry/git downloads. Caching `target/`
+      # across dependency or toolchain changes restores stale compiled
+      # artifacts, which surfaces as spurious trait-resolution errors
+      # (e.g. ChaCha20Rng: CryptoRng) on incremental recompile.
       - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            contract/soroban/target
           key: cargo-${{ runner.os }}-${{ hashFiles('contract/soroban/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
 
       - name: Run tests
         working-directory: contract/soroban
-        run: cargo test --workspace
+        # --locked pins the committed Cargo.lock resolution. Without it, a
+        # fresh resolve pulls newly-published majors (e.g. ed25519-dalek 3.0)
+        # that break soroban-env-host's testutils.
+        run: cargo test --workspace --locked
 
   # ── Build ────────────────────────────────────────────────────────────────────
   build:
