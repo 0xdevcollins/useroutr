@@ -139,7 +139,10 @@ jobs:
 
       - name: Run tests
         working-directory: contract/soroban
-        run: cargo test --workspace
+        # --locked pins the committed Cargo.lock resolution. Without it, a
+        # fresh resolve pulls newly-published majors (e.g. ed25519-dalek 3.0)
+        # that break soroban-env-host's testutils.
+        run: cargo test --workspace --locked
 
   # ── Build ────────────────────────────────────────────────────────────────────
   build:
