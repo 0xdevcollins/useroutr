@@ -7,6 +7,7 @@ import { QuotesService } from '../quotes/quotes.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { LinksService } from '../links/links.service';
 import { CctpService } from '../cctp/cctp.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface MockPayment {
   id: string;
@@ -127,6 +128,14 @@ describe('PaymentsService', () => {
         // helper into the test — keeps the test surface tiny.
         { provide: `BullQueue_cctp.observe`, useValue: cctpQueue },
         { provide: ConfigService, useValue: configService },
+        {
+          provide: NotificationsService,
+          useValue: {
+            notifyPaymentCompleted: jest.fn(),
+            sendPaymentReceipt: jest.fn(),
+            sendPaymentNotification: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -263,10 +272,12 @@ describe('PaymentsService', () => {
         { data: Record<string, unknown> },
       ];
       const data = createCall[0].data;
-      expect(data).not.toHaveProperty('sourceChain');
-      expect(data).not.toHaveProperty('sourceAsset');
-      expect(data).not.toHaveProperty('sourceAmount');
-      expect(data).not.toHaveProperty('quoteId');
+      // Source fields (and the quote) stay null until the customer picks a
+      // payment method — link-initiated payments are created pre-quote.
+      expect(data.sourceChain).toBeNull();
+      expect(data.sourceAsset).toBeNull();
+      expect(data.sourceAmount).toBeNull();
+      expect(data.quoteId).toBeNull();
       // Fixed-amount link → destAmount comes from link.amount, not body.
       expect(String((data as { destAmount: unknown }).destAmount)).toBe('25');
       expect(linksService.markUsed).toHaveBeenCalledWith(

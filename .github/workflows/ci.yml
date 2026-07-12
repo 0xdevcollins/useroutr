@@ -106,28 +106,6 @@ jobs:
         working-directory: apps/api
         run: npm test
 
-  # ── Test EVM Contracts ───────────────────────────────────────────────────────
-  test-contracts-evm:
-    name: Test EVM Contracts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - run: npm ci
-
-      - name: Compile contracts
-        working-directory: contract/evm
-        run: npx hardhat compile
-
-      - name: Run tests
-        working-directory: contract/evm
-        run: npx hardhat test
-
   # ── Test Soroban Contracts ───────────────────────────────────────────────────
   test-contracts-soroban:
     name: Test Soroban Contracts

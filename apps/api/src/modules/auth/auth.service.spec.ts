@@ -86,6 +86,7 @@ const mockJwtService = {
 const mockNotificationsService = {
   sendVerificationCodeEmail: jest.fn().mockResolvedValue(undefined),
   sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+  notifyApiKeyCreated: jest.fn().mockResolvedValue(undefined),
 };
 
 // MerchantSettlementService stub — register() calls provision() in a
