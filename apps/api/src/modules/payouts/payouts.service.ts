@@ -889,7 +889,7 @@ export class PayoutsService implements OnApplicationBootstrap {
       EXECUTE_PAYOUT_JOB,
       { payoutId: payout.id },
       {
-        jobId: `payout:${payout.id}`,
+        jobId: `payout-${payout.id}`,
         delay,
         attempts: 1,
         ...PAYOUT_JOB_CLEANUP,
@@ -902,7 +902,7 @@ export class PayoutsService implements OnApplicationBootstrap {
       EXECUTE_PAYOUT_BATCH_JOB,
       { batchId },
       {
-        jobId: `payout-batch:${batchId}`,
+        jobId: `payout-batch-${batchId}`,
         attempts: 1,
         ...PAYOUT_JOB_CLEANUP,
       },
@@ -916,7 +916,7 @@ export class PayoutsService implements OnApplicationBootstrap {
       GENERATE_RECURRING_PAYOUT_JOB,
       { recurringPayoutId: recurring.id },
       {
-        jobId: `recurring-payout:${recurring.id}`,
+        jobId: `recurring-payout-${recurring.id}`,
         delay: Math.max(0, recurring.nextRunAt.getTime() - Date.now()),
         repeat: {
           every: this.frequencyToMilliseconds(recurring.frequency),
@@ -1015,7 +1015,7 @@ export class PayoutsService implements OnApplicationBootstrap {
   }
 
   private recurringJobKey(id: string): string {
-    return `recurring-payout:${id}`;
+    return `recurring-payout-${id}`;
   }
 
   private async buildConfirmationFields(
