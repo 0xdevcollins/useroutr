@@ -912,14 +912,15 @@ export class PayoutsService implements OnApplicationBootstrap {
   private async enqueueRecurringPayout(
     recurring: RecurringPayout,
   ): Promise<void> {
+    const every = this.frequencyToMilliseconds(recurring.frequency);
     await this.payoutQueue.add(
       GENERATE_RECURRING_PAYOUT_JOB,
       { recurringPayoutId: recurring.id },
       {
         jobId: `recurring-payout-${recurring.id}`,
-        delay: Math.max(0, recurring.nextRunAt.getTime() - Date.now()),
         repeat: {
-          every: this.frequencyToMilliseconds(recurring.frequency),
+          every,
+          offset: recurring.nextRunAt.getTime() % every,
           key: this.recurringJobKey(recurring.id),
         },
         attempts: 1,
