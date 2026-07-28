@@ -1,13 +1,20 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, token, Address, Env,
+    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env,
 };
+use soroban_sdk::panic_with_error;
 
 #[contracttype]
 pub enum DataKey {
     Admin,
     FeeBps,
     Treasury,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum FeeCollectorError {
+    AlreadyInitialized = 8,
 }
 
 #[contractevent(data_format = "vec")]
@@ -40,6 +47,9 @@ pub struct FeeCollectorContract;
 #[contractimpl]
 impl FeeCollectorContract {
     pub fn initialize(env: Env, admin: Address, fee_bps: u32, treasury: Address) {
+        if env.storage().instance().has(&DataKey::Admin) {
+            panic_with_error!(&env, FeeCollectorError::AlreadyInitialized);
+        }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::FeeBps, &fee_bps);

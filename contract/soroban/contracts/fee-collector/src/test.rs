@@ -81,6 +81,16 @@ fn set_fee_bps_above_limit_panics() {
 
 #[test]
 #[should_panic]
+fn double_initialize_panics() {
+    let (env, contract_id, _token_address, admin, treasury) = setup();
+    let client = FeeCollectorContractClient::new(&env, &contract_id);
+
+    client.initialize(&admin, &75, &treasury);
+    client.initialize(&admin, &75, &treasury);
+}
+
+#[test]
+#[should_panic]
 fn deduct_before_initialize_panics() {
     let (env, contract_id, token_address, _admin, _treasury) = setup();
     let merchant = Address::generate(&env);
