@@ -66,6 +66,14 @@ function assetToString(asset: AssetObject): string {
   return `${asset.code}:${asset.issuer}`;
 }
 
+function stellarUsdcAsset(network?: string): string {
+  const isMainnet = network?.toLowerCase() === 'mainnet';
+  const issuer = isMainnet
+    ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+    : 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+  return `USDC:${issuer}`;
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -655,8 +663,7 @@ export class PayoutsService implements OnApplicationBootstrap {
     destination: Record<string, unknown>,
   ): Promise<void> {
     const destAddress = String(destination.address);
-    const destAsset =
-      typeof destination.asset === 'string' ? destination.asset : 'native';
+    const destAsset = this.normalizeStellarAsset(destination.asset);
     const sourceAsset = 'native';
     const sourceAmount = payout.amount.toString();
     const sourceSecret = await this.getMerchantPayoutSourceSecret(
@@ -732,6 +739,20 @@ export class PayoutsService implements OnApplicationBootstrap {
         stellarTxHash: txHash,
       } as Prisma.InputJsonValue)
       .catch(() => undefined);
+  }
+
+  private normalizeStellarAsset(asset: unknown): string {
+    if (typeof asset !== 'string' || asset.trim() === '') return 'native';
+
+    const normalized = asset.trim();
+    const upper = normalized.toUpperCase();
+    if (upper === 'XLM' || normalized.toLowerCase() === 'native') {
+      return 'native';
+    }
+    if (upper === 'USDC') {
+      return stellarUsdcAsset(this.config.get<string>('STELLAR_NETWORK'));
+    }
+    return normalized;
   }
 
   private async startPayoutProcessing(payoutId: string): Promise<Payout | null> {

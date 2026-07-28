@@ -59,7 +59,7 @@ export const CreatePayoutSchema = z.object({
     .refine((v) => parseFloat(v) > 0, {
       message: 'amount must be greater than 0',
     }),
-  currency: z.string().length(3).toUpperCase(),
+  currency: z.string().min(3).max(12).toUpperCase(),
   scheduledAt: z.coerce.date().optional(),
 });
 

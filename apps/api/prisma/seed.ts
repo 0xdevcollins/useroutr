@@ -10,11 +10,18 @@ async function main() {
 
   // Clean existing data (order matters due to FK constraints)
   await prisma.webhookEvent.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.merchantLedgerEntry.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.quote.deleteMany();
   await prisma.paymentLink.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.payout.deleteMany();
+  await prisma.recurringPayout.deleteMany();
+  await prisma.recipient.deleteMany();
+  await prisma.merchantBalance.deleteMany();
+  await prisma.merchantSettlementKey.deleteMany();
+  await prisma.apiKey.deleteMany();
   await prisma.teamMember.deleteMany();
   await prisma.merchant.deleteMany();
 
@@ -90,6 +97,102 @@ async function main() {
   });
 
   console.log('Created team members');
+
+  // ── Balances / Recipients ───────────────────────────────────
+
+  await prisma.merchantBalance.createMany({
+    data: [
+      {
+        merchantId: acme.id,
+        availableAmount: '25000.00',
+        reservedAmount: '0',
+        currency: 'USDC',
+      },
+      {
+        merchantId: globex.id,
+        availableAmount: '7500.00',
+        reservedAmount: '0',
+        currency: 'USDC',
+      },
+      {
+        merchantId: initech.id,
+        availableAmount: '50.00',
+        reservedAmount: '0',
+        currency: 'USDC',
+      },
+    ],
+  });
+
+  await prisma.merchantLedgerEntry.createMany({
+    data: [
+      {
+        merchantId: acme.id,
+        type: 'CREDIT',
+        amount: '25000.00',
+        currency: 'USDC',
+        description: 'Seeded settlement balance for payout testing',
+      },
+      {
+        merchantId: globex.id,
+        type: 'CREDIT',
+        amount: '7500.00',
+        currency: 'USDC',
+        description: 'Seeded settlement balance for payout testing',
+      },
+      {
+        merchantId: initech.id,
+        type: 'CREDIT',
+        amount: '50.00',
+        currency: 'USDC',
+        description: 'Seeded low balance for insufficient-funds testing',
+      },
+    ],
+  });
+
+  const [acmeStellarRecipient, acmeTreasuryRecipient, globexPartnerRecipient] =
+    await Promise.all([
+      prisma.recipient.create({
+        data: {
+          merchantId: acme.id,
+          name: 'Acme Stellar Ops Wallet',
+          type: 'STELLAR',
+          details: {
+            type: 'STELLAR',
+            address: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOBD3XCDGYOO5SS',
+            asset: 'USDC',
+          },
+          isDefault: true,
+        },
+      }),
+      prisma.recipient.create({
+        data: {
+          merchantId: acme.id,
+          name: 'Acme Treasury Wallet',
+          type: 'CRYPTO_WALLET',
+          details: {
+            type: 'CRYPTO_WALLET',
+            address: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
+            network: 'ethereum',
+            asset: 'USDC',
+          },
+        },
+      }),
+      prisma.recipient.create({
+        data: {
+          merchantId: globex.id,
+          name: 'Globex Stellar Partner',
+          type: 'STELLAR',
+          details: {
+            type: 'STELLAR',
+            address: 'GBZXN7PIRZGNMHGA7MUUUF4GWPY5AHDKSTEBKHL5USQV7IRG3OVRRM',
+            asset: 'USDC',
+          },
+          isDefault: true,
+        },
+      }),
+    ]);
+
+  console.log('Created merchant balances, ledger credits, and recipients');
 
   // ── Quotes ───────────────────────────────────────────────────
 
@@ -429,6 +532,11 @@ async function main() {
 
   // ── Payouts ──────────────────────────────────────────────────
 
+  const oneMinuteAgo = new Date(now.getTime() - 60_000);
+  const twoMinutesLater = new Date(now.getTime() + 120_000);
+  const fiveMinutesLater = new Date(now.getTime() + 300_000);
+  const confirmationCodeHash = await hash('123456', 10);
+
   await prisma.payout.createMany({
     data: [
       // Completed bank payout
@@ -451,12 +559,14 @@ async function main() {
       // Completed crypto payout
       {
         merchantId: acme.id,
+        recipientId: acmeTreasuryRecipient.id,
         recipientName: 'Acme Treasury Wallet',
         destinationType: 'CRYPTO_WALLET',
         destination: {
-          type: 'crypto',
-          chain: 'ethereum',
+          type: 'CRYPTO_WALLET',
+          network: 'ethereum',
           address: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18',
+          asset: 'USDC',
         },
         amount: '2500.00',
         currency: 'USDC',
@@ -482,16 +592,90 @@ async function main() {
       // Pending Stellar payout
       {
         merchantId: globex.id,
+        recipientId: globexPartnerRecipient.id,
         recipientName: 'Globex Partner',
         destinationType: 'STELLAR',
         destination: {
-          type: 'stellar',
-          address: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOBD3XCDGYOO5SS',
+          type: 'STELLAR',
+          address: 'GBZXN7PIRZGNMHGA7MUUUF4GWPY5AHDKSTEBKHL5USQV7IRG3OVRRM',
+          asset: 'USDC',
         },
         amount: '800.00',
         currency: 'USDC',
         status: 'PENDING',
         scheduledAt: new Date(now.getTime() + 86_400_000),
+      },
+      // Due scheduled payout: API restart reconciliation should enqueue it
+      // and BullMQ should execute it shortly after startup.
+      {
+        merchantId: acme.id,
+        recipientId: acmeStellarRecipient.id,
+        recipientName: 'Acme Due Scheduled Payout',
+        destinationType: 'STELLAR',
+        destination: {
+          type: 'STELLAR',
+          address: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOBD3XCDGYOO5SS',
+          asset: 'USDC',
+        },
+        amount: '25.00',
+        currency: 'USDC',
+        status: 'PENDING',
+        scheduledAt: oneMinuteAgo,
+        idempotencyKey: 'seed-due-scheduled-payout',
+      },
+      // Future scheduled payout: should stay pending until the delayed
+      // BullMQ job reaches its scheduled time.
+      {
+        merchantId: acme.id,
+        recipientId: acmeStellarRecipient.id,
+        recipientName: 'Acme Future Scheduled Payout',
+        destinationType: 'STELLAR',
+        destination: {
+          type: 'STELLAR',
+          address: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOBD3XCDGYOO5SS',
+          asset: 'USDC',
+        },
+        amount: '30.00',
+        currency: 'USDC',
+        status: 'PENDING',
+        scheduledAt: twoMinutesLater,
+        idempotencyKey: 'seed-future-scheduled-payout',
+      },
+      // Confirmation-required payout. Use code 123456 against
+      // POST /v1/payouts/:id/confirm, then BullMQ should execute it.
+      {
+        merchantId: acme.id,
+        recipientId: acmeStellarRecipient.id,
+        recipientName: 'Acme High Value Approval Test',
+        destinationType: 'STELLAR',
+        destination: {
+          type: 'STELLAR',
+          address: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOBD3XCDGYOO5SS',
+          asset: 'USDC',
+        },
+        amount: '7500.00',
+        currency: 'USDC',
+        status: 'REQUIRES_CONFIRMATION',
+        confirmationCodeHash,
+        confirmationCodeExpiresAt: fiveMinutesLater,
+        idempotencyKey: 'seed-confirmation-required-payout',
+      },
+      // Insufficient-balance payout: Initech has only 50 USDC available, so
+      // processing this should fail clearly without debiting funds.
+      {
+        merchantId: initech.id,
+        recipientName: 'Initech Insufficient Balance Test',
+        destinationType: 'STELLAR',
+        destination: {
+          type: 'STELLAR',
+          address: 'GCKFBEIYV2U22IO2BJ4KVJOIP7XPWQGQFKKWXR6DOSJBV7STMAQSMTGG',
+          asset: 'USDC',
+        },
+        amount: '500.00',
+        currency: 'USDC',
+        status: 'PENDING',
+        scheduledAt: oneMinuteAgo,
+        idempotencyKey: 'seed-insufficient-balance-payout',
       },
       // Failed payout
       {
@@ -527,6 +711,45 @@ async function main() {
   });
 
   console.log('Created payouts');
+
+  await prisma.recurringPayout.createMany({
+    data: [
+      {
+        merchantId: acme.id,
+        recipientId: acmeStellarRecipient.id,
+        recipientName: 'Acme Daily Recurring Payout',
+        destinationType: 'STELLAR',
+        destination: {
+          type: 'STELLAR',
+          address: 'GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOBD3XCDGYOO5SS',
+          asset: 'USDC',
+        },
+        amount: '15.00',
+        currency: 'USDC',
+        frequency: 'DAILY',
+        nextRunAt: oneMinuteAgo,
+        active: true,
+      },
+      {
+        merchantId: globex.id,
+        recipientId: globexPartnerRecipient.id,
+        recipientName: 'Globex Weekly Partner Payout',
+        destinationType: 'STELLAR',
+        destination: {
+          type: 'STELLAR',
+          address: 'GBZXN7PIRZGNMHGA7MUUUF4GWPY5AHDKSTEBKHL5USQV7IRG3OVRRM',
+          asset: 'USDC',
+        },
+        amount: '125.00',
+        currency: 'USDC',
+        frequency: 'WEEKLY',
+        nextRunAt: twoMinutesLater,
+        active: true,
+      },
+    ],
+  });
+
+  console.log('Created recurring payout configs');
 
   // ── Webhook Events ───────────────────────────────────────────
 
@@ -590,6 +813,9 @@ async function main() {
   console.log(`Created ${webhookData.length} webhook events`);
 
   console.log('\nSeed completed successfully!');
+  console.log(
+    'Restart the API after seeding so BullMQ reconciles seeded scheduled and recurring payouts into Redis.',
+  );
 }
 
 main()
