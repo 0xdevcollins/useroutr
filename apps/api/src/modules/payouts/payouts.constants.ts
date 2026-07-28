@@ -3,6 +3,7 @@ export const PAYOUTS_QUEUE = 'payouts';
 export const EXECUTE_PAYOUT_JOB = 'execute-payout';
 export const EXECUTE_PAYOUT_BATCH_JOB = 'execute-payout-batch';
 export const GENERATE_RECURRING_PAYOUT_JOB = 'generate-recurring-payout';
+export const RUN_RECURRING_PAYOUTS_JOB = 'run-recurring-payouts';
 
 export interface ExecutePayoutJobData {
   payoutId: string;
@@ -15,6 +16,8 @@ export interface ExecutePayoutBatchJobData {
 export interface GenerateRecurringPayoutJobData {
   recurringPayoutId: string;
 }
+
+export type RunRecurringPayoutsJobData = Record<string, never>;
 
 export const PAYOUT_JOB_CLEANUP = {
   removeOnComplete: {

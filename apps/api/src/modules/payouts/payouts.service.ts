@@ -38,11 +38,13 @@ import {
   EXECUTE_PAYOUT_BATCH_JOB,
   EXECUTE_PAYOUT_JOB,
   GENERATE_RECURRING_PAYOUT_JOB,
+  RUN_RECURRING_PAYOUTS_JOB,
   PAYOUTS_QUEUE,
   PAYOUT_JOB_CLEANUP,
   type ExecutePayoutBatchJobData,
   type ExecutePayoutJobData,
   type GenerateRecurringPayoutJobData,
+  type RunRecurringPayoutsJobData,
 } from './payouts.constants';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -83,12 +85,14 @@ export class PayoutsService implements OnApplicationBootstrap {
       | ExecutePayoutJobData
       | ExecutePayoutBatchJobData
       | GenerateRecurringPayoutJobData
+      | RunRecurringPayoutsJobData
     >,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     await this.reconcileScheduledPayoutJobs();
     await this.reconcileRecurringPayoutJobs();
+    await this.enqueueRecurringDispatcher();
   }
 
   // ── Create single payout ──────────────────────────────────────────────────
@@ -605,6 +609,21 @@ export class PayoutsService implements OnApplicationBootstrap {
     }
   }
 
+  async processDueRecurringPayouts(): Promise<void> {
+    const due = await this.prisma.recurringPayout.findMany({
+      where: {
+        active: true,
+        nextRunAt: { lte: new Date() },
+      },
+      orderBy: { nextRunAt: 'asc' },
+      take: 100,
+    });
+
+    for (const recurring of due) {
+      await this.processRecurringPayout(recurring.id);
+    }
+  }
+
   private async processPayout(payout: Payout): Promise<void> {
     const started = await this.startPayoutProcessing(payout.id);
     if (!started) return;
@@ -933,6 +952,22 @@ export class PayoutsService implements OnApplicationBootstrap {
     await this.payoutQueue
       .removeRepeatableByKey(this.recurringJobKey(id))
       .catch(() => undefined);
+  }
+
+  private async enqueueRecurringDispatcher(): Promise<void> {
+    await this.payoutQueue.add(
+      RUN_RECURRING_PAYOUTS_JOB,
+      {},
+      {
+        jobId: 'run-recurring-payouts',
+        repeat: {
+          every: 30_000,
+          key: 'run-recurring-payouts',
+        },
+        attempts: 1,
+        ...PAYOUT_JOB_CLEANUP,
+      },
+    );
   }
 
   private async reconcileScheduledPayoutJobs(): Promise<void> {

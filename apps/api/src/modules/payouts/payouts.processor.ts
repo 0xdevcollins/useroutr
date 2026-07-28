@@ -6,6 +6,7 @@ import {
   EXECUTE_PAYOUT_BATCH_JOB,
   EXECUTE_PAYOUT_JOB,
   GENERATE_RECURRING_PAYOUT_JOB,
+  RUN_RECURRING_PAYOUTS_JOB,
   type GenerateRecurringPayoutJobData,
   type ExecutePayoutBatchJobData,
   type ExecutePayoutJobData,
@@ -44,6 +45,11 @@ export class PayoutsProcessor extends WorkerHost {
       await this.payoutsService.processRecurringPayout(
         data.recurringPayoutId,
       );
+      return;
+    }
+
+    if (job.name === RUN_RECURRING_PAYOUTS_JOB) {
+      await this.payoutsService.processDueRecurringPayouts();
       return;
     }
 
