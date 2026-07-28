@@ -4,7 +4,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { DestType, Payout, PayoutStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
@@ -14,6 +17,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePayoutDto, BulkPayoutDto } from './dto/create-payout.dto';
 import { PayoutFiltersDto } from './dto/payout-filters.dto';
 import { randomUUID } from 'crypto';
+import {
+  EXECUTE_PAYOUT_BATCH_JOB,
+  EXECUTE_PAYOUT_JOB,
+  PAYOUTS_QUEUE,
+  PAYOUT_JOB_CLEANUP,
+  type ExecutePayoutBatchJobData,
+  type ExecutePayoutJobData,
+} from './payouts.constants';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,7 +48,7 @@ function assetToString(asset: AssetObject): string {
 // ── Service ───────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class PayoutsService {
+export class PayoutsService implements OnApplicationBootstrap {
   private readonly logger = new Logger(PayoutsService.name);
 
   constructor(
@@ -46,7 +57,15 @@ export class PayoutsService {
     private readonly stellar: StellarService,
     private readonly eventsService: EventsService,
     private readonly notifications: NotificationsService,
+    @InjectQueue(PAYOUTS_QUEUE)
+    private readonly payoutQueue: Queue<
+      ExecutePayoutJobData | ExecutePayoutBatchJobData
+    >,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.reconcileScheduledPayoutJobs();
+  }
 
   // ── Create single payout ──────────────────────────────────────────────────
 
@@ -112,10 +131,7 @@ export class PayoutsService {
       )
       .catch(() => undefined);
 
-    // Process immediately unless scheduled for the future
-    if (!payout.scheduledAt || payout.scheduledAt <= new Date()) {
-      this.processPayout(payout).catch(() => undefined);
-    }
+    await this.enqueuePayout(payout);
 
     return payout;
   }
@@ -130,6 +146,7 @@ export class PayoutsService {
     const results: BulkPayoutResult['payouts'] = [];
     let accepted = 0;
     let rejected = 0;
+    let dueNow = 0;
 
     for (let i = 0; i < dto.payouts.length; i++) {
       const item = dto.payouts[i];
@@ -172,8 +189,10 @@ export class PayoutsService {
         results.push({ index: i, payoutId: payout.id });
         accepted++;
 
-        if (!payout.scheduledAt || payout.scheduledAt <= new Date()) {
-          this.processPayout(payout).catch(() => undefined);
+        if (payout.scheduledAt && payout.scheduledAt > new Date()) {
+          await this.enqueuePayout(payout);
+        } else {
+          dueNow++;
         }
       } catch (err) {
         rejected++;
@@ -192,6 +211,10 @@ export class PayoutsService {
         rejected,
       } as Prisma.InputJsonValue)
       .catch(() => undefined);
+
+    if (dueNow > 0) {
+      await this.enqueueBatch(batchId);
+    }
 
     return {
       batchId,
@@ -287,12 +310,51 @@ export class PayoutsService {
       )
       .catch(() => undefined);
 
-    this.processPayout(reset).catch(() => undefined);
+    await this.enqueuePayout(reset);
 
     return reset;
   }
 
   // ── Internal processing ───────────────────────────────────────────────────
+
+  async processQueuedPayout(payoutId: string): Promise<void> {
+    const payout = await this.prisma.payout.findUnique({
+      where: { id: payoutId },
+    });
+    if (!payout) {
+      this.logger.warn(`Queued payout ${payoutId} skipped: not found`);
+      return;
+    }
+
+    if (payout.status !== PayoutStatus.PENDING) {
+      this.logger.log(
+        `Queued payout ${payout.id} skipped: status is ${payout.status}`,
+      );
+      return;
+    }
+
+    if (payout.scheduledAt && payout.scheduledAt > new Date()) {
+      await this.enqueuePayout(payout);
+      return;
+    }
+
+    await this.processPayout(payout);
+  }
+
+  async processQueuedBatch(batchId: string): Promise<void> {
+    const payouts = await this.prisma.payout.findMany({
+      where: {
+        batchId,
+        status: PayoutStatus.PENDING,
+        OR: [{ scheduledAt: null }, { scheduledAt: { lte: new Date() } }],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    for (const payout of payouts) {
+      await this.processQueuedPayout(payout.id);
+    }
+  }
 
   private async processPayout(payout: Payout): Promise<void> {
     await this.prisma.payout.update({
@@ -463,5 +525,53 @@ export class PayoutsService {
       ...(payout.stellarTxHash && { stellarTxHash: payout.stellarTxHash }),
       createdAt: payout.createdAt.toISOString(),
     };
+  }
+
+  private async enqueuePayout(payout: Payout): Promise<void> {
+    const delay = payout.scheduledAt
+      ? Math.max(0, payout.scheduledAt.getTime() - Date.now())
+      : 0;
+
+    await this.payoutQueue.add(
+      EXECUTE_PAYOUT_JOB,
+      { payoutId: payout.id },
+      {
+        jobId: `payout:${payout.id}`,
+        delay,
+        attempts: 1,
+        ...PAYOUT_JOB_CLEANUP,
+      },
+    );
+  }
+
+  private async enqueueBatch(batchId: string): Promise<void> {
+    await this.payoutQueue.add(
+      EXECUTE_PAYOUT_BATCH_JOB,
+      { batchId },
+      {
+        jobId: `payout-batch:${batchId}`,
+        attempts: 1,
+        ...PAYOUT_JOB_CLEANUP,
+      },
+    );
+  }
+
+  private async reconcileScheduledPayoutJobs(): Promise<void> {
+    const scheduled = await this.prisma.payout.findMany({
+      where: {
+        status: PayoutStatus.PENDING,
+        scheduledAt: { not: null },
+      },
+    });
+
+    for (const payout of scheduled) {
+      await this.enqueuePayout(payout);
+    }
+
+    if (scheduled.length > 0) {
+      this.logger.log(
+        `Reconciled ${scheduled.length} scheduled payout job(s)`,
+      );
+    }
   }
 }
