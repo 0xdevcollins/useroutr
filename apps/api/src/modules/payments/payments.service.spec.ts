@@ -57,6 +57,13 @@ describe('PaymentsService', () => {
     webhookEvent: {
       create: jest.fn(),
     },
+    merchantBalance: {
+      upsert: jest.fn(),
+    },
+    merchantLedgerEntry: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
 
@@ -112,7 +119,14 @@ describe('PaymentsService', () => {
     prisma.payment.findUnique.mockResolvedValue(paymentRecord);
     prisma.payment.update.mockResolvedValue(paymentRecord);
     prisma.webhookEvent.create.mockResolvedValue({});
-    prisma.$transaction.mockResolvedValue(undefined);
+    prisma.merchantBalance.upsert.mockResolvedValue({});
+    prisma.merchantLedgerEntry.create.mockResolvedValue({});
+    prisma.merchantLedgerEntry.findFirst.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation(async (arg: unknown) => {
+      if (Array.isArray(arg)) return Promise.all(arg);
+      if (typeof arg === 'function') return arg(prisma);
+      return arg;
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
