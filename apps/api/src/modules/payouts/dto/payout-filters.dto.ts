@@ -2,7 +2,14 @@ import { z } from 'zod';
 
 export const PayoutFiltersSchema = z.object({
   status: z
-    .enum(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'])
+    .enum([
+      'PENDING',
+      'REQUIRES_CONFIRMATION',
+      'PROCESSING',
+      'COMPLETED',
+      'FAILED',
+      'CANCELLED',
+    ])
     .optional(),
   destinationType: z
     .enum(['BANK_ACCOUNT', 'MOBILE_MONEY', 'CRYPTO_WALLET', 'STELLAR'])

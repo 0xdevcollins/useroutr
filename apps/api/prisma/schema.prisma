@@ -306,6 +306,8 @@ model Payout {
   stellarTxHash   String?
   scheduledAt     DateTime?
   confirmedAt     DateTime?
+  confirmationCodeHash String?
+  confirmationCodeExpiresAt DateTime?
   completedAt     DateTime?
   failureReason   String?
   batchId         String?

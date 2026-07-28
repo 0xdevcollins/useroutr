@@ -292,10 +292,33 @@ export const payoutConfirmationTemplate = (payout: Payout) =>
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #fafafa; border-radius: 6px; padding: 16px; margin-bottom: 16px;">
       <tr><td style="padding: 8px 16px; font-size: 13px; color: #71717a;">Amount</td>
-          <td style="padding: 8px 16px; font-size: 13px; color: #18181b; text-align: right; font-weight: 600;">${formatAmount(payout.amount, payout.currency)}</td></tr>
+          <td style="padding: 8px 16px; font-size: 13px; color: #18181b; text-align: right; font-weight: 600;">${formatAmount(Number(payout.amount), payout.currency)}</td></tr>
       <tr><td style="padding: 8px 16px; font-size: 13px; color: #71717a;">Destination</td>
           <td style="padding: 8px 16px; font-size: 13px; color: #18181b; text-align: right;">${esc(payout.destination)}</td></tr>
       <tr><td style="padding: 8px 16px; font-size: 13px; color: #71717a;">Status</td>
           <td style="padding: 8px 16px; font-size: 13px; color: #18181b; text-align: right;">${esc(payout.status)}</td></tr>
+    </table>
+  `);
+
+export const payoutApprovalCodeTemplate = (payout: {
+  code: string;
+  payoutId: string;
+  recipientName: string;
+  amount: string;
+  currency: string;
+  expiresInMinutes: number;
+}) =>
+  layout(`
+    <h2 style="margin: 0 0 16px; font-size: 20px; color: #18181b;">Confirm Payout</h2>
+    <p style="margin: 0 0 16px; font-size: 14px; color: #3f3f46; line-height: 1.6;">
+      Use this code to confirm payout <strong>${esc(payout.payoutId)}</strong> to <strong>${esc(payout.recipientName)}</strong>.
+      It expires in ${payout.expiresInMinutes} minutes.
+    </p>
+    <div style="font-size: 28px; letter-spacing: 6px; font-weight: 700; color: #18181b; margin: 20px 0;">
+      ${esc(payout.code)}
+    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #fafafa; border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+      <tr><td style="padding: 8px 16px; font-size: 13px; color: #71717a;">Amount</td>
+          <td style="padding: 8px 16px; font-size: 13px; color: #18181b; text-align: right; font-weight: 600;">${formatAmount(Number(payout.amount), payout.currency)}</td></tr>
     </table>
   `);

@@ -22,6 +22,8 @@ import {
   CreateRecurringPayoutDto,
   UpdateRecurringPayoutSchema,
   UpdateRecurringPayoutDto,
+  ConfirmPayoutSchema,
+  ConfirmPayoutDto,
 } from './dto/create-payout.dto';
 import {
   PayoutFiltersSchema,
@@ -123,6 +125,16 @@ export class PayoutsController {
     @Param('id') id: string,
   ) {
     return this.payoutsService.getById(id, merchantId);
+  }
+
+  @Post(':id/confirm')
+  @UseGuards(JwtAuthGuard)
+  async confirm(
+    @CurrentMerchant('id') merchantId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ConfirmPayoutSchema)) dto: ConfirmPayoutDto,
+  ) {
+    return this.payoutsService.confirm(id, merchantId, dto);
   }
 
   // ── POST /v1/payouts/:id/cancel ───────────────────────────────────────────

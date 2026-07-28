@@ -7,6 +7,7 @@ import {
   OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import {
   DestType,
@@ -27,9 +28,11 @@ import {
   BulkPayoutDto,
   CreateRecurringPayoutDto,
   UpdateRecurringPayoutDto,
+  ConfirmPayoutDto,
 } from './dto/create-payout.dto';
 import { PayoutFiltersDto } from './dto/payout-filters.dto';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import {
   EXECUTE_PAYOUT_BATCH_JOB,
   EXECUTE_PAYOUT_JOB,
@@ -72,6 +75,7 @@ export class PayoutsService implements OnApplicationBootstrap {
     private readonly stellar: StellarService,
     private readonly eventsService: EventsService,
     private readonly notifications: NotificationsService,
+    private readonly config: ConfigService,
     @InjectQueue(PAYOUTS_QUEUE)
     private readonly payoutQueue: Queue<
       | ExecutePayoutJobData
@@ -126,6 +130,7 @@ export class PayoutsService implements OnApplicationBootstrap {
       };
     }
 
+    const confirmation = await this.buildConfirmationFields(dto.amount);
     const payout = await this.prisma.payout.create({
       data: {
         merchantId,
@@ -135,8 +140,12 @@ export class PayoutsService implements OnApplicationBootstrap {
         destination: finalDto.destination as Prisma.InputJsonValue,
         amount: dto.amount,
         currency: dto.currency,
-        status: PayoutStatus.PENDING,
+        status: confirmation
+          ? PayoutStatus.REQUIRES_CONFIRMATION
+          : PayoutStatus.PENDING,
         scheduledAt: dto.scheduledAt ?? null,
+        confirmationCodeHash: confirmation?.hash ?? null,
+        confirmationCodeExpiresAt: confirmation?.expiresAt ?? null,
         idempotencyKey: idempotencyKey ?? null,
       },
     });
@@ -149,7 +158,11 @@ export class PayoutsService implements OnApplicationBootstrap {
       )
       .catch(() => undefined);
 
-    await this.enqueuePayout(payout);
+    if (confirmation) {
+      await this.sendPayoutConfirmationCode(payout, confirmation.code);
+    } else {
+      await this.enqueuePayout(payout);
+    }
 
     return payout;
   }
@@ -190,6 +203,7 @@ export class PayoutsService implements OnApplicationBootstrap {
           };
         }
 
+        const confirmation = await this.buildConfirmationFields(item.amount);
         const payout = await this.prisma.payout.create({
           data: {
             merchantId,
@@ -199,15 +213,21 @@ export class PayoutsService implements OnApplicationBootstrap {
             destination: finalItem.destination as Prisma.InputJsonValue,
             amount: item.amount,
             currency: item.currency,
-            status: PayoutStatus.PENDING,
+            status: confirmation
+              ? PayoutStatus.REQUIRES_CONFIRMATION
+              : PayoutStatus.PENDING,
             scheduledAt: item.scheduledAt ?? null,
+            confirmationCodeHash: confirmation?.hash ?? null,
+            confirmationCodeExpiresAt: confirmation?.expiresAt ?? null,
             batchId,
           },
         });
         results.push({ index: i, payoutId: payout.id });
         accepted++;
 
-        if (payout.scheduledAt && payout.scheduledAt > new Date()) {
+        if (confirmation) {
+          await this.sendPayoutConfirmationCode(payout, confirmation.code);
+        } else if (payout.scheduledAt && payout.scheduledAt > new Date()) {
           await this.enqueuePayout(payout);
         } else {
           dueNow++;
@@ -285,6 +305,44 @@ export class PayoutsService implements OnApplicationBootstrap {
       throw new NotFoundException('Payout not found');
     }
     return payout;
+  }
+
+  async confirm(
+    id: string,
+    merchantId: string,
+    dto: ConfirmPayoutDto,
+  ): Promise<Payout> {
+    const payout = await this.getById(id, merchantId);
+    if (payout.status !== PayoutStatus.REQUIRES_CONFIRMATION) {
+      throw new BadRequestException(
+        `Cannot confirm a payout in ${payout.status} status`,
+      );
+    }
+    if (
+      !payout.confirmationCodeHash ||
+      !payout.confirmationCodeExpiresAt ||
+      payout.confirmationCodeExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Payout confirmation code is expired');
+    }
+
+    const ok = await bcrypt.compare(dto.code, payout.confirmationCodeHash);
+    if (!ok) {
+      throw new BadRequestException('Invalid payout confirmation code');
+    }
+
+    const confirmed = await this.prisma.payout.update({
+      where: { id: payout.id },
+      data: {
+        status: PayoutStatus.PENDING,
+        confirmedAt: new Date(),
+        confirmationCodeHash: null,
+        confirmationCodeExpiresAt: null,
+      },
+    });
+
+    await this.enqueuePayout(confirmed);
+    return confirmed;
   }
 
   // ── Recurring payouts ────────────────────────────────────────────────────
@@ -402,9 +460,12 @@ export class PayoutsService implements OnApplicationBootstrap {
   async cancel(id: string, merchantId: string): Promise<Payout> {
     const payout = await this.getById(id, merchantId);
 
-    if (payout.status !== PayoutStatus.PENDING) {
+    if (
+      payout.status !== PayoutStatus.PENDING &&
+      payout.status !== PayoutStatus.REQUIRES_CONFIRMATION
+    ) {
       throw new BadRequestException(
-        `Cannot cancel a payout in ${payout.status} status — only PENDING payouts can be cancelled`,
+        `Cannot cancel a payout in ${payout.status} status — only pending payouts can be cancelled`,
       );
     }
 
@@ -425,9 +486,19 @@ export class PayoutsService implements OnApplicationBootstrap {
       );
     }
 
+    const confirmation = await this.buildConfirmationFields(
+      payout.amount.toString(),
+    );
     const reset = await this.prisma.payout.update({
       where: { id },
-      data: { status: PayoutStatus.PENDING, failureReason: null },
+      data: {
+        status: confirmation
+          ? PayoutStatus.REQUIRES_CONFIRMATION
+          : PayoutStatus.PENDING,
+        failureReason: null,
+        confirmationCodeHash: confirmation?.hash ?? null,
+        confirmationCodeExpiresAt: confirmation?.expiresAt ?? null,
+      },
     });
 
     this.webhooks
@@ -438,7 +509,11 @@ export class PayoutsService implements OnApplicationBootstrap {
       )
       .catch(() => undefined);
 
-    await this.enqueuePayout(reset);
+    if (confirmation) {
+      await this.sendPayoutConfirmationCode(reset, confirmation.code);
+    } else {
+      await this.enqueuePayout(reset);
+    }
 
     return reset;
   }
@@ -491,6 +566,9 @@ export class PayoutsService implements OnApplicationBootstrap {
     if (!recurring || !recurring.active) return;
 
     const now = new Date();
+    const confirmation = await this.buildConfirmationFields(
+      recurring.amount.toString(),
+    );
     const payout = await this.prisma.payout.create({
       data: {
         merchantId: recurring.merchantId,
@@ -500,8 +578,12 @@ export class PayoutsService implements OnApplicationBootstrap {
         destination: recurring.destination as Prisma.InputJsonValue,
         amount: recurring.amount,
         currency: recurring.currency,
-        status: PayoutStatus.PENDING,
+        status: confirmation
+          ? PayoutStatus.REQUIRES_CONFIRMATION
+          : PayoutStatus.PENDING,
         scheduledAt: now,
+        confirmationCodeHash: confirmation?.hash ?? null,
+        confirmationCodeExpiresAt: confirmation?.expiresAt ?? null,
         recurringPayoutId: recurring.id,
       },
     });
@@ -514,7 +596,11 @@ export class PayoutsService implements OnApplicationBootstrap {
       },
     });
 
-    await this.enqueuePayout(payout);
+    if (confirmation) {
+      await this.sendPayoutConfirmationCode(payout, confirmation.code);
+    } else {
+      await this.enqueuePayout(payout);
+    }
   }
 
   private async processPayout(payout: Payout): Promise<void> {
@@ -923,5 +1009,40 @@ export class PayoutsService implements OnApplicationBootstrap {
 
   private recurringJobKey(id: string): string {
     return `recurring-payout:${id}`;
+  }
+
+  private async buildConfirmationFields(
+    amount: string,
+  ): Promise<{ code: string; hash: string; expiresAt: Date } | null> {
+    const threshold = Number(this.config.get<string>('PAYOUT_2FA_THRESHOLD'));
+    if (!Number.isFinite(threshold) || threshold <= 0) return null;
+    if (Number(amount) <= threshold) return null;
+
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    return {
+      code,
+      hash: await bcrypt.hash(code, 10),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    };
+  }
+
+  private async sendPayoutConfirmationCode(
+    payout: Payout,
+    code: string,
+  ): Promise<void> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: payout.merchantId },
+      select: { email: true },
+    });
+    if (!merchant) return;
+
+    await this.notifications.sendPayoutApprovalCode(merchant.email, {
+      code,
+      payoutId: payout.id,
+      recipientName: payout.recipientName,
+      amount: payout.amount.toString(),
+      currency: payout.currency,
+      expiresInMinutes: 10,
+    });
   }
 }

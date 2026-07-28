@@ -91,6 +91,12 @@ export type UpdateRecurringPayoutDto = z.infer<
   typeof UpdateRecurringPayoutSchema
 >;
 
+export const ConfirmPayoutSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'code must be a 6-digit string'),
+});
+
+export type ConfirmPayoutDto = z.infer<typeof ConfirmPayoutSchema>;
+
 // ── Bulk payout ────────────────────────────────────────────────────────────────
 
 export const BulkPayoutSchema = z.object({
