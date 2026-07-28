@@ -8,7 +8,13 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { DestType, Payout, PayoutStatus, Prisma } from '@prisma/client';
+import {
+  DestType,
+  MerchantLedgerEntryType,
+  Payout,
+  PayoutStatus,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { StellarService } from '../stellar/stellar.service';
@@ -357,58 +363,28 @@ export class PayoutsService implements OnApplicationBootstrap {
   }
 
   private async processPayout(payout: Payout): Promise<void> {
-    await this.prisma.payout.update({
-      where: { id: payout.id },
-      data: { status: PayoutStatus.PROCESSING },
-    });
+    const started = await this.startPayoutProcessing(payout.id);
+    if (!started) return;
 
     try {
-      const destination = payout.destination as Record<string, unknown>;
+      const destination = started.destination as Record<string, unknown>;
 
       const isStellarPayout =
-        payout.destinationType === DestType.STELLAR ||
-        (payout.destinationType === DestType.CRYPTO_WALLET &&
+        started.destinationType === DestType.STELLAR ||
+        (started.destinationType === DestType.CRYPTO_WALLET &&
           typeof destination.network === 'string' &&
           destination.network.toLowerCase() === 'stellar');
 
       if (isStellarPayout) {
-        await this.processStellarPayout(payout, destination);
+        await this.processStellarPayout(started, destination);
       }
       // BANK_ACCOUNT and MOBILE_MONEY remain PROCESSING until external system
       // delivers and calls back to update the status.
     } catch (err) {
       const failureReason =
         err instanceof Error ? err.message : 'Processing failed';
-      const failed = await this.prisma.payout.update({
-        where: { id: payout.id },
-        data: { status: PayoutStatus.FAILED, failureReason },
-      });
-      this.eventsService.emitPayoutStatus(
-        payout.merchantId,
-        payout.id,
-        PayoutStatus.FAILED,
-        {
-          amount: failed.amount.toString(),
-          currency: failed.currency,
-          failureReason,
-          updatedAt: new Date(),
-        },
-      );
-      void this.notifications
-        .notifyPayoutFailed(
-          payout.merchantId,
-          payout.id,
-          payout.recipientName,
-          failureReason,
-        )
-        .catch(() => undefined);
-      this.webhooks
-        .dispatch(payout.merchantId, 'payout.failed', {
-          ...this.webhookPayload(failed),
-          failureReason,
-        } as Prisma.InputJsonValue)
-        .catch(() => undefined);
-      this.logger.error(`Payout ${payout.id} failed: ${failureReason}`);
+      await this.releaseDebitedFunds(started);
+      await this.failPayout(started, failureReason);
     }
   }
 
@@ -489,6 +465,135 @@ export class PayoutsService implements OnApplicationBootstrap {
         stellarTxHash: txHash,
       } as Prisma.InputJsonValue)
       .catch(() => undefined);
+  }
+
+  private async startPayoutProcessing(payoutId: string): Promise<Payout | null> {
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO "MerchantBalance" ("merchantId", "availableAmount", "reservedAmount", "currency", "updatedAt")
+        SELECT "merchantId", 0, 0, "currency", NOW()
+        FROM "Payout"
+        WHERE "id" = ${payoutId}
+        ON CONFLICT ("merchantId") DO NOTHING
+      `;
+
+      const payout = await tx.payout.findUnique({ where: { id: payoutId } });
+      if (!payout || payout.status !== PayoutStatus.PENDING) {
+        return { payout: null, failureReason: null };
+      }
+
+      const rows = await tx.$queryRaw<
+        Array<{
+          availableAmount: Prisma.Decimal;
+          currency: string;
+        }>
+      >`
+        SELECT "availableAmount", "currency"
+        FROM "MerchantBalance"
+        WHERE "merchantId" = ${payout.merchantId}
+        FOR UPDATE
+      `;
+      const balance = rows[0];
+
+      if (!balance || balance.currency !== payout.currency) {
+        return {
+          payout,
+          failureReason: `Insufficient balance for ${payout.currency}`,
+        };
+      }
+
+      if (balance.availableAmount.lt(payout.amount)) {
+        return {
+          payout,
+          failureReason: `Insufficient balance for ${payout.currency}`,
+        };
+      }
+
+      await tx.merchantBalance.update({
+        where: { merchantId: payout.merchantId },
+        data: {
+          availableAmount: { decrement: payout.amount },
+        },
+      });
+      await tx.merchantLedgerEntry.create({
+        data: {
+          merchantId: payout.merchantId,
+          payoutId: payout.id,
+          type: MerchantLedgerEntryType.PAYOUT_DEBIT,
+          amount: payout.amount,
+          currency: payout.currency,
+          description: 'Payout execution debit',
+        },
+      });
+
+      const started = await tx.payout.update({
+        where: { id: payout.id },
+        data: { status: PayoutStatus.PROCESSING },
+      });
+      return { payout: started, failureReason: null };
+    });
+
+    if (result.failureReason && result.payout) {
+      await this.failPayout(result.payout, result.failureReason);
+      return null;
+    }
+
+    return result.payout;
+  }
+
+  private async releaseDebitedFunds(payout: Payout): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.merchantBalance.update({
+        where: { merchantId: payout.merchantId },
+        data: { availableAmount: { increment: payout.amount } },
+      });
+      await tx.merchantLedgerEntry.create({
+        data: {
+          merchantId: payout.merchantId,
+          payoutId: payout.id,
+          type: MerchantLedgerEntryType.PAYOUT_RELEASE,
+          amount: payout.amount,
+          currency: payout.currency,
+          description: 'Payout execution funds released after failure',
+        },
+      });
+    });
+  }
+
+  private async failPayout(
+    payout: Payout,
+    failureReason: string,
+  ): Promise<void> {
+    const failed = await this.prisma.payout.update({
+      where: { id: payout.id },
+      data: { status: PayoutStatus.FAILED, failureReason },
+    });
+    this.eventsService.emitPayoutStatus(
+      payout.merchantId,
+      payout.id,
+      PayoutStatus.FAILED,
+      {
+        amount: failed.amount.toString(),
+        currency: failed.currency,
+        failureReason,
+        updatedAt: new Date(),
+      },
+    );
+    void this.notifications
+      .notifyPayoutFailed(
+        payout.merchantId,
+        payout.id,
+        payout.recipientName,
+        failureReason,
+      )
+      .catch(() => undefined);
+    this.webhooks
+      .dispatch(payout.merchantId, 'payout.failed', {
+        ...this.webhookPayload(failed),
+        failureReason,
+      } as Prisma.InputJsonValue)
+      .catch(() => undefined);
+    this.logger.error(`Payout ${payout.id} failed: ${failureReason}`);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
