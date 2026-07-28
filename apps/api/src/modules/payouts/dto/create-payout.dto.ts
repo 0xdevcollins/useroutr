@@ -65,6 +65,32 @@ export const CreatePayoutSchema = z.object({
 
 export type CreatePayoutDto = z.infer<typeof CreatePayoutSchema>;
 
+export const RecurringPayoutFrequencySchema = z.enum([
+  'DAILY',
+  'WEEKLY',
+  'BI_WEEKLY',
+  'MONTHLY',
+]);
+
+export const CreateRecurringPayoutSchema = CreatePayoutSchema.omit({
+  scheduledAt: true,
+}).extend({
+  frequency: RecurringPayoutFrequencySchema,
+  startsAt: z.coerce.date().optional(),
+});
+
+export const UpdateRecurringPayoutSchema =
+  CreateRecurringPayoutSchema.partial().extend({
+    active: z.boolean().optional(),
+  });
+
+export type CreateRecurringPayoutDto = z.infer<
+  typeof CreateRecurringPayoutSchema
+>;
+export type UpdateRecurringPayoutDto = z.infer<
+  typeof UpdateRecurringPayoutSchema
+>;
+
 // ── Bulk payout ────────────────────────────────────────────────────────────────
 
 export const BulkPayoutSchema = z.object({

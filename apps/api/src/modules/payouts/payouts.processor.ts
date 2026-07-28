@@ -5,12 +5,17 @@ import { PayoutsService } from './payouts.service';
 import {
   EXECUTE_PAYOUT_BATCH_JOB,
   EXECUTE_PAYOUT_JOB,
+  GENERATE_RECURRING_PAYOUT_JOB,
+  type GenerateRecurringPayoutJobData,
   type ExecutePayoutBatchJobData,
   type ExecutePayoutJobData,
   PAYOUTS_QUEUE,
 } from './payouts.constants';
 
-type PayoutJobData = ExecutePayoutJobData | ExecutePayoutBatchJobData;
+type PayoutJobData =
+  | ExecutePayoutJobData
+  | ExecutePayoutBatchJobData
+  | GenerateRecurringPayoutJobData;
 
 @Injectable()
 @Processor(PAYOUTS_QUEUE)
@@ -31,6 +36,14 @@ export class PayoutsProcessor extends WorkerHost {
     if (job.name === EXECUTE_PAYOUT_BATCH_JOB) {
       const data = job.data as ExecutePayoutBatchJobData;
       await this.payoutsService.processQueuedBatch(data.batchId);
+      return;
+    }
+
+    if (job.name === GENERATE_RECURRING_PAYOUT_JOB) {
+      const data = job.data as GenerateRecurringPayoutJobData;
+      await this.payoutsService.processRecurringPayout(
+        data.recurringPayoutId,
+      );
       return;
     }
 

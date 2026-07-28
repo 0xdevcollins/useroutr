@@ -14,22 +14,31 @@ import {
   Payout,
   PayoutStatus,
   Prisma,
+  RecurringPayout,
+  RecurringPayoutFrequency,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { StellarService } from '../stellar/stellar.service';
 import { EventsService } from '../events/events/events.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CreatePayoutDto, BulkPayoutDto } from './dto/create-payout.dto';
+import {
+  CreatePayoutDto,
+  BulkPayoutDto,
+  CreateRecurringPayoutDto,
+  UpdateRecurringPayoutDto,
+} from './dto/create-payout.dto';
 import { PayoutFiltersDto } from './dto/payout-filters.dto';
 import { randomUUID } from 'crypto';
 import {
   EXECUTE_PAYOUT_BATCH_JOB,
   EXECUTE_PAYOUT_JOB,
+  GENERATE_RECURRING_PAYOUT_JOB,
   PAYOUTS_QUEUE,
   PAYOUT_JOB_CLEANUP,
   type ExecutePayoutBatchJobData,
   type ExecutePayoutJobData,
+  type GenerateRecurringPayoutJobData,
 } from './payouts.constants';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -65,12 +74,15 @@ export class PayoutsService implements OnApplicationBootstrap {
     private readonly notifications: NotificationsService,
     @InjectQueue(PAYOUTS_QUEUE)
     private readonly payoutQueue: Queue<
-      ExecutePayoutJobData | ExecutePayoutBatchJobData
+      | ExecutePayoutJobData
+      | ExecutePayoutBatchJobData
+      | GenerateRecurringPayoutJobData
     >,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     await this.reconcileScheduledPayoutJobs();
+    await this.reconcileRecurringPayoutJobs();
   }
 
   // ── Create single payout ──────────────────────────────────────────────────
@@ -275,6 +287,116 @@ export class PayoutsService implements OnApplicationBootstrap {
     return payout;
   }
 
+  // ── Recurring payouts ────────────────────────────────────────────────────
+
+  async createRecurring(
+    merchantId: string,
+    dto: CreateRecurringPayoutDto,
+  ): Promise<RecurringPayout> {
+    const finalDto = await this.resolveRecipientDetails(merchantId, dto);
+    const startsAt = dto.startsAt ?? this.nextRunAfter(new Date(), dto.frequency);
+
+    const recurring = await this.prisma.recurringPayout.create({
+      data: {
+        merchantId,
+        recipientId: dto.recipientId ?? null,
+        recipientName: finalDto.recipientName,
+        destinationType: finalDto.destinationType as DestType,
+        destination: finalDto.destination as Prisma.InputJsonValue,
+        amount: dto.amount,
+        currency: dto.currency,
+        frequency: dto.frequency as RecurringPayoutFrequency,
+        nextRunAt: startsAt,
+      },
+    });
+
+    await this.enqueueRecurringPayout(recurring);
+    return recurring;
+  }
+
+  async listRecurring(merchantId: string): Promise<RecurringPayout[]> {
+    return this.prisma.recurringPayout.findMany({
+      where: { merchantId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getRecurring(
+    id: string,
+    merchantId: string,
+  ): Promise<RecurringPayout> {
+    const recurring = await this.prisma.recurringPayout.findUnique({
+      where: { id },
+    });
+    if (!recurring || recurring.merchantId !== merchantId) {
+      throw new NotFoundException('Recurring payout not found');
+    }
+    return recurring;
+  }
+
+  async updateRecurring(
+    id: string,
+    merchantId: string,
+    dto: UpdateRecurringPayoutDto,
+  ): Promise<RecurringPayout> {
+    const existing = await this.getRecurring(id, merchantId);
+    const finalDto =
+      dto.recipientId || dto.destination
+        ? await this.resolveRecipientDetails(merchantId, {
+            recipientId: dto.recipientId ?? existing.recipientId ?? undefined,
+            recipientName: dto.recipientName ?? existing.recipientName,
+            destinationType:
+              dto.destinationType ?? existing.destinationType,
+            destination:
+              dto.destination ??
+              (existing.destination as unknown as CreatePayoutDto['destination']),
+            amount: dto.amount ?? existing.amount.toString(),
+            currency: dto.currency ?? existing.currency,
+          })
+        : null;
+
+    const updated = await this.prisma.recurringPayout.update({
+      where: { id },
+      data: {
+        ...(dto.recipientId !== undefined && {
+          recipientId: dto.recipientId,
+        }),
+        ...(finalDto && { recipientName: finalDto.recipientName }),
+        ...(finalDto && {
+          destinationType: finalDto.destinationType as DestType,
+          destination: finalDto.destination as Prisma.InputJsonValue,
+        }),
+        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.currency !== undefined && { currency: dto.currency }),
+        ...(dto.frequency !== undefined && {
+          frequency: dto.frequency as RecurringPayoutFrequency,
+        }),
+        ...(dto.startsAt !== undefined && { nextRunAt: dto.startsAt }),
+        ...(dto.active !== undefined && { active: dto.active }),
+      },
+    });
+
+    await this.removeRecurringPayoutJob(updated.id);
+    if (updated.active) {
+      await this.enqueueRecurringPayout(updated);
+    }
+
+    return updated;
+  }
+
+  async deleteRecurring(
+    id: string,
+    merchantId: string,
+  ): Promise<RecurringPayout> {
+    const existing = await this.getRecurring(id, merchantId);
+    const updated = await this.prisma.recurringPayout.update({
+      where: { id: existing.id },
+      data: { active: false },
+    });
+    await this.removeRecurringPayoutJob(existing.id);
+    return updated;
+  }
+
   // ── Cancel ────────────────────────────────────────────────────────────────
 
   async cancel(id: string, merchantId: string): Promise<Payout> {
@@ -360,6 +482,39 @@ export class PayoutsService implements OnApplicationBootstrap {
     for (const payout of payouts) {
       await this.processQueuedPayout(payout.id);
     }
+  }
+
+  async processRecurringPayout(recurringPayoutId: string): Promise<void> {
+    const recurring = await this.prisma.recurringPayout.findUnique({
+      where: { id: recurringPayoutId },
+    });
+    if (!recurring || !recurring.active) return;
+
+    const now = new Date();
+    const payout = await this.prisma.payout.create({
+      data: {
+        merchantId: recurring.merchantId,
+        recipientId: recurring.recipientId,
+        recipientName: recurring.recipientName,
+        destinationType: recurring.destinationType,
+        destination: recurring.destination as Prisma.InputJsonValue,
+        amount: recurring.amount,
+        currency: recurring.currency,
+        status: PayoutStatus.PENDING,
+        scheduledAt: now,
+        recurringPayoutId: recurring.id,
+      },
+    });
+
+    await this.prisma.recurringPayout.update({
+      where: { id: recurring.id },
+      data: {
+        lastRunAt: now,
+        nextRunAt: this.nextRunAfter(now, recurring.frequency),
+      },
+    });
+
+    await this.enqueuePayout(payout);
   }
 
   private async processPayout(payout: Payout): Promise<void> {
@@ -661,6 +816,31 @@ export class PayoutsService implements OnApplicationBootstrap {
     );
   }
 
+  private async enqueueRecurringPayout(
+    recurring: RecurringPayout,
+  ): Promise<void> {
+    await this.payoutQueue.add(
+      GENERATE_RECURRING_PAYOUT_JOB,
+      { recurringPayoutId: recurring.id },
+      {
+        jobId: `recurring-payout:${recurring.id}`,
+        delay: Math.max(0, recurring.nextRunAt.getTime() - Date.now()),
+        repeat: {
+          every: this.frequencyToMilliseconds(recurring.frequency),
+          key: this.recurringJobKey(recurring.id),
+        },
+        attempts: 1,
+        ...PAYOUT_JOB_CLEANUP,
+      },
+    );
+  }
+
+  private async removeRecurringPayoutJob(id: string): Promise<void> {
+    await this.payoutQueue
+      .removeRepeatableByKey(this.recurringJobKey(id))
+      .catch(() => undefined);
+  }
+
   private async reconcileScheduledPayoutJobs(): Promise<void> {
     const scheduled = await this.prisma.payout.findMany({
       where: {
@@ -678,5 +858,70 @@ export class PayoutsService implements OnApplicationBootstrap {
         `Reconciled ${scheduled.length} scheduled payout job(s)`,
       );
     }
+  }
+
+  private async reconcileRecurringPayoutJobs(): Promise<void> {
+    const recurringPayouts = await this.prisma.recurringPayout.findMany({
+      where: { active: true },
+    });
+
+    for (const recurring of recurringPayouts) {
+      await this.enqueueRecurringPayout(recurring);
+    }
+
+    if (recurringPayouts.length > 0) {
+      this.logger.log(
+        `Reconciled ${recurringPayouts.length} recurring payout job(s)`,
+      );
+    }
+  }
+
+  private async resolveRecipientDetails<T extends CreatePayoutDto>(
+    merchantId: string,
+    dto: T,
+  ): Promise<T> {
+    if (!dto.recipientId) return dto;
+
+    const recipient = await this.prisma.recipient.findFirst({
+      where: { id: dto.recipientId, merchantId },
+    });
+    if (!recipient) {
+      throw new NotFoundException('Recipient not found');
+    }
+
+    return {
+      ...dto,
+      recipientName: recipient.name,
+      destinationType: recipient.type,
+      destination: recipient.details as unknown as T['destination'],
+    };
+  }
+
+  private frequencyToMilliseconds(
+    frequency: RecurringPayoutFrequency,
+  ): number {
+    switch (frequency) {
+      case RecurringPayoutFrequency.DAILY:
+        return 24 * 60 * 60 * 1000;
+      case RecurringPayoutFrequency.WEEKLY:
+        return 7 * 24 * 60 * 60 * 1000;
+      case RecurringPayoutFrequency.BI_WEEKLY:
+        return 14 * 24 * 60 * 60 * 1000;
+      case RecurringPayoutFrequency.MONTHLY:
+        return 30 * 24 * 60 * 60 * 1000;
+    }
+  }
+
+  private nextRunAfter(
+    date: Date,
+    frequency: RecurringPayoutFrequency | `${RecurringPayoutFrequency}`,
+  ): Date {
+    return new Date(date.getTime() + this.frequencyToMilliseconds(
+      frequency as RecurringPayoutFrequency,
+    ));
+  }
+
+  private recurringJobKey(id: string): string {
+    return `recurring-payout:${id}`;
   }
 }
