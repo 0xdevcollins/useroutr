@@ -42,9 +42,7 @@ export class PayoutsProcessor extends WorkerHost {
 
     if (job.name === GENERATE_RECURRING_PAYOUT_JOB) {
       const data = job.data as GenerateRecurringPayoutJobData;
-      await this.payoutsService.processRecurringPayout(
-        data.recurringPayoutId,
-      );
+      await this.payoutsService.processRecurringPayout(data.recurringPayoutId);
       return;
     }
 

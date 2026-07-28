@@ -124,7 +124,10 @@ describe('PaymentsService', () => {
     prisma.merchantLedgerEntry.findFirst.mockResolvedValue(null);
     prisma.$transaction.mockImplementation(async (arg: unknown) => {
       if (Array.isArray(arg)) return Promise.all(arg);
-      if (typeof arg === 'function') return arg(prisma);
+      if (typeof arg === 'function') {
+        const transaction = arg as (client: typeof prisma) => Promise<unknown>;
+        return transaction(prisma);
+      }
       return arg;
     });
 
