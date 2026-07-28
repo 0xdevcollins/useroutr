@@ -23,6 +23,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { StellarService } from '../stellar/stellar.service';
 import { EventsService } from '../events/events/events.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MerchantSettlementService } from '../merchant/merchant-settlement.service';
 import {
   CreatePayoutDto,
   BulkPayoutDto,
@@ -73,6 +74,7 @@ export class PayoutsService implements OnApplicationBootstrap {
     private readonly prisma: PrismaService,
     private readonly webhooks: WebhooksService,
     private readonly stellar: StellarService,
+    private readonly settlement: MerchantSettlementService,
     private readonly eventsService: EventsService,
     private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
@@ -638,6 +640,9 @@ export class PayoutsService implements OnApplicationBootstrap {
       typeof destination.asset === 'string' ? destination.asset : 'native';
     const sourceAsset = 'native';
     const sourceAmount = payout.amount.toString();
+    const sourceSecret = await this.getMerchantPayoutSourceSecret(
+      payout.merchantId,
+    );
 
     let txHash: string;
 
@@ -648,6 +653,7 @@ export class PayoutsService implements OnApplicationBootstrap {
         asset: sourceAsset,
         amount: sourceAmount,
         destinationAccount: destAddress,
+        sourceSecret,
       });
     } else {
       const { paths } = await this.stellar.findStrictSendPaths({
@@ -673,6 +679,7 @@ export class PayoutsService implements OnApplicationBootstrap {
         destinationAsset: destAsset,
         destinationMinAmount: destMin,
         path: pathStrings,
+        sourceSecret,
       });
     }
 
@@ -1044,5 +1051,16 @@ export class PayoutsService implements OnApplicationBootstrap {
       currency: payout.currency,
       expiresInMinutes: 10,
     });
+  }
+
+  private async getMerchantPayoutSourceSecret(
+    merchantId: string,
+  ): Promise<string | undefined> {
+    const settlementKey = await this.prisma.merchantSettlementKey.findUnique({
+      where: { merchantId },
+    });
+    if (!settlementKey?.managed) return undefined;
+
+    return this.settlement.decryptSeed(settlementKey);
   }
 }

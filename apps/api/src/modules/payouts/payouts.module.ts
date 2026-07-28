@@ -10,12 +10,14 @@ import { StellarModule } from '../stellar/stellar.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MerchantModule } from '../merchant/merchant.module';
 
 @Module({
   imports: [
     PrismaModule,
     WebhooksModule,
     StellarModule,
+    MerchantModule,
     AuthModule,
     EventsModule,
     NotificationsModule,

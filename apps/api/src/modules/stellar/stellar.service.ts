@@ -182,10 +182,11 @@ export class StellarService {
     destinationMinAmount: string;
     destinationAccount: string;
     path: string[];
+    sourceSecret?: string;
   }): Promise<string> {
     this.logger.log('Executing Stellar path payment');
 
-    const keypair = this.requireKeypair();
+    const keypair = this.requireKeypair(params.sourceSecret);
     const account = await this.horizonServer.loadAccount(keypair.publicKey());
 
     const tx = new StellarSdk.TransactionBuilder(account, {
@@ -220,10 +221,11 @@ export class StellarService {
     asset: string;
     amount: string;
     destinationAccount: string;
+    sourceSecret?: string;
   }): Promise<string> {
     this.logger.log('Executing Stellar direct payment');
 
-    const keypair = this.requireKeypair();
+    const keypair = this.requireKeypair(params.sourceSecret);
     const account = await this.horizonServer.loadAccount(keypair.publicKey());
 
     const tx = new StellarSdk.TransactionBuilder(account, {
@@ -285,7 +287,10 @@ export class StellarService {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private requireKeypair(): StellarSdk.Keypair {
+  private requireKeypair(sourceSecret?: string): StellarSdk.Keypair {
+    if (sourceSecret) {
+      return StellarSdk.Keypair.fromSecret(sourceSecret);
+    }
     if (!this.relayKeypair) {
       throw new Error('STELLAR_RELAY_KEYPAIR_SECRET is not configured');
     }
