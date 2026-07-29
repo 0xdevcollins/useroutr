@@ -6,8 +6,12 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { validateEnvironmentConfig } from './common/config/env-validation';
 
 async function bootstrap() {
+  // Validate critical environment variables before starting the application
+  validateEnvironmentConfig();
+
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // ── Security headers ────────────────────────────────────────────────────────
