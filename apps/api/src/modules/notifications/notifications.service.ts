@@ -431,4 +431,22 @@ export class NotificationsService {
       html: templates.payoutConfirmationTemplate(payout),
     });
   }
+
+  async sendPayoutApprovalCode(
+    merchantEmail: string,
+    payout: {
+      code: string;
+      payoutId: string;
+      recipientName: string;
+      amount: string;
+      currency: string;
+      expiresInMinutes: number;
+    },
+  ): Promise<void> {
+    await this.dispatch({
+      to: merchantEmail,
+      subject: `Confirm payout ${payout.payoutId}`,
+      html: templates.payoutApprovalCodeTemplate(payout),
+    });
+  }
 }

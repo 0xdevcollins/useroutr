@@ -2,12 +2,19 @@ import { z } from 'zod';
 
 export const PayoutFiltersSchema = z.object({
   status: z
-    .enum(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'])
+    .enum([
+      'PENDING',
+      'REQUIRES_CONFIRMATION',
+      'PROCESSING',
+      'COMPLETED',
+      'FAILED',
+      'CANCELLED',
+    ])
     .optional(),
   destinationType: z
     .enum(['BANK_ACCOUNT', 'MOBILE_MONEY', 'CRYPTO_WALLET', 'STELLAR'])
     .optional(),
-  currency: z.string().length(3).toUpperCase().optional(),
+  currency: z.string().min(3).max(12).toUpperCase().optional(),
   dateFrom: z.coerce.date().optional(),
   dateTo: z.coerce.date().optional(),
   batchId: z.string().optional(),

@@ -49,6 +49,9 @@ model Merchant {
   notifications     Notification[]
   settlementKey     MerchantSettlementKey?
   recipients        Recipient[]
+  recurringPayouts  RecurringPayout[]
+  balances          MerchantBalance[]
+  ledgerEntries     MerchantLedgerEntry[]
 }
 
 model ApiKey {
@@ -302,20 +305,85 @@ model Payout {
   status          PayoutStatus @default(PENDING)
   stellarTxHash   String?
   scheduledAt     DateTime?
+  confirmedAt     DateTime?
+  confirmationCodeHash String?
+  confirmationCodeExpiresAt DateTime?
+  confirmationAttempts Int  @default(0)
   completedAt     DateTime?
   failureReason   String?
   batchId         String?
   idempotencyKey  String?      @unique
   recipientId     String?
+  recurringPayoutId String?
   createdAt       DateTime     @default(now())
   merchant        Merchant     @relation(fields: [merchantId], references: [id])
   recipient       Recipient?   @relation(fields: [recipientId], references: [id])
+  recurringPayout RecurringPayout? @relation(fields: [recurringPayoutId], references: [id], onDelete: SetNull)
 
   @@index([merchantId])
   @@index([status])
+  @@index([scheduledAt])
   @@index([batchId])
   @@index([createdAt])
   @@index([recipientId])
+  @@index([recurringPayoutId])
+}
+
+model RecurringPayout {
+  id              String                   @id @default(cuid())
+  merchantId      String
+  recipientId     String?
+  recipientName   String
+  destinationType DestType
+  destination     Json
+  amount          Decimal                  @db.Decimal(36, 18)
+  currency        String
+  frequency       RecurringPayoutFrequency
+  nextRunAt       DateTime
+  lastRunAt       DateTime?
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  merchant        Merchant                 @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  recipient       Recipient?               @relation(fields: [recipientId], references: [id], onDelete: SetNull)
+  payouts         Payout[]
+
+  @@index([merchantId])
+  @@index([active, nextRunAt])
+  @@index([recipientId])
+}
+
+// One row per merchant per currency — balances in different currencies must
+// never be summed into a single amount.
+model MerchantBalance {
+  merchantId      String
+  availableAmount Decimal  @default(0) @db.Decimal(36, 18)
+  reservedAmount  Decimal  @default(0) @db.Decimal(36, 18)
+  currency        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@id([merchantId, currency])
+}
+
+model MerchantLedgerEntry {
+  id          String                  @id @default(cuid())
+  merchantId  String
+  payoutId    String?
+  paymentId   String?
+  type        MerchantLedgerEntryType
+  amount      Decimal                 @db.Decimal(36, 18)
+  currency    String
+  description String?
+  createdAt   DateTime                @default(now())
+  merchant    Merchant                @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  // A payment may be credited at most once, even under concurrent webhooks.
+  @@unique([paymentId, type])
+  @@index([merchantId, createdAt])
+  @@index([payoutId])
+  @@index([paymentId])
 }
 
 // Saved payout destination. Reconstructed to match migration
@@ -331,6 +399,7 @@ model Recipient {
   updatedAt  DateTime @updatedAt
   merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   payouts    Payout[]
+  recurringPayouts RecurringPayout[]
 
   @@unique([merchantId, name])
   @@index([merchantId])
@@ -346,10 +415,24 @@ enum DestType {
 
 enum PayoutStatus {
   PENDING
+  REQUIRES_CONFIRMATION
   PROCESSING
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum RecurringPayoutFrequency {
+  DAILY
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+}
+
+enum MerchantLedgerEntryType {
+  CREDIT
+  PAYOUT_DEBIT
+  PAYOUT_RELEASE
 }
 
 // ── Webhooks ──────────────────────────────────────────────────

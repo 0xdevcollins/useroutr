@@ -59,11 +59,43 @@ export const CreatePayoutSchema = z.object({
     .refine((v) => parseFloat(v) > 0, {
       message: 'amount must be greater than 0',
     }),
-  currency: z.string().length(3).toUpperCase(),
+  currency: z.string().min(3).max(12).toUpperCase(),
   scheduledAt: z.coerce.date().optional(),
 });
 
 export type CreatePayoutDto = z.infer<typeof CreatePayoutSchema>;
+
+export const RecurringPayoutFrequencySchema = z.enum([
+  'DAILY',
+  'WEEKLY',
+  'BI_WEEKLY',
+  'MONTHLY',
+]);
+
+export const CreateRecurringPayoutSchema = CreatePayoutSchema.omit({
+  scheduledAt: true,
+}).extend({
+  frequency: RecurringPayoutFrequencySchema,
+  startsAt: z.coerce.date().optional(),
+});
+
+export const UpdateRecurringPayoutSchema =
+  CreateRecurringPayoutSchema.partial().extend({
+    active: z.boolean().optional(),
+  });
+
+export type CreateRecurringPayoutDto = z.infer<
+  typeof CreateRecurringPayoutSchema
+>;
+export type UpdateRecurringPayoutDto = z.infer<
+  typeof UpdateRecurringPayoutSchema
+>;
+
+export const ConfirmPayoutSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'code must be a 6-digit string'),
+});
+
+export type ConfirmPayoutDto = z.infer<typeof ConfirmPayoutSchema>;
 
 // ── Bulk payout ────────────────────────────────────────────────────────────────
 

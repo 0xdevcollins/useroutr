@@ -6,9 +6,11 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
+  Delete,
 } from '@nestjs/common';
 import { PayoutsService } from './payouts.service';
 import {
@@ -16,6 +18,12 @@ import {
   CreatePayoutDto,
   BulkPayoutSchema,
   BulkPayoutDto,
+  CreateRecurringPayoutSchema,
+  CreateRecurringPayoutDto,
+  UpdateRecurringPayoutSchema,
+  UpdateRecurringPayoutDto,
+  ConfirmPayoutSchema,
+  ConfirmPayoutDto,
 } from './dto/create-payout.dto';
 import {
   PayoutFiltersSchema,
@@ -64,6 +72,52 @@ export class PayoutsController {
     return this.payoutsService.list(merchantId, filters);
   }
 
+  @Post('recurring')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.CREATED)
+  async createRecurring(
+    @CurrentMerchant('id') merchantId: string,
+    @Body(new ZodValidationPipe(CreateRecurringPayoutSchema))
+    dto: CreateRecurringPayoutDto,
+  ) {
+    return this.payoutsService.createRecurring(merchantId, dto);
+  }
+
+  @Get('recurring')
+  @UseGuards(JwtAuthGuard)
+  async listRecurring(@CurrentMerchant('id') merchantId: string) {
+    return this.payoutsService.listRecurring(merchantId);
+  }
+
+  @Get('recurring/:id')
+  @UseGuards(JwtAuthGuard)
+  async getRecurring(
+    @CurrentMerchant('id') merchantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.payoutsService.getRecurring(id, merchantId);
+  }
+
+  @Patch('recurring/:id')
+  @UseGuards(JwtAuthGuard)
+  async updateRecurring(
+    @CurrentMerchant('id') merchantId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateRecurringPayoutSchema))
+    dto: UpdateRecurringPayoutDto,
+  ) {
+    return this.payoutsService.updateRecurring(id, merchantId, dto);
+  }
+
+  @Delete('recurring/:id')
+  @UseGuards(JwtAuthGuard)
+  async deleteRecurring(
+    @CurrentMerchant('id') merchantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.payoutsService.deleteRecurring(id, merchantId);
+  }
+
   // ── GET /v1/payouts/:id ───────────────────────────────────────────────────
   @Get(':id')
   async getOne(
@@ -71,6 +125,16 @@ export class PayoutsController {
     @Param('id') id: string,
   ) {
     return this.payoutsService.getById(id, merchantId);
+  }
+
+  @Post(':id/confirm')
+  @UseGuards(JwtAuthGuard)
+  async confirm(
+    @CurrentMerchant('id') merchantId: string,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ConfirmPayoutSchema)) dto: ConfirmPayoutDto,
+  ) {
+    return this.payoutsService.confirm(id, merchantId, dto);
   }
 
   // ── POST /v1/payouts/:id/cancel ───────────────────────────────────────────
