@@ -1,8 +1,8 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
+    Address, Env,
 };
-use soroban_sdk::panic_with_error;
 
 #[contracttype]
 pub enum DataKey {
@@ -14,7 +14,7 @@ pub enum DataKey {
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum FeeCollectorError {
-    AlreadyInitialized = 8,
+    AlreadyInitialized = 1,
 }
 
 #[contractevent(data_format = "vec")]

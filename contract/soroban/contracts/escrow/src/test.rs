@@ -2,7 +2,7 @@
 
 use super::*;
 use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{Env};
+use soroban_sdk::Env;
 
 #[test]
 fn initialize_sets_admin() {
@@ -19,8 +19,7 @@ fn initialize_sets_admin() {
 }
 
 #[test]
-#[should_panic]
-fn double_initialize_panics() {
+fn double_initialize_fails_with_already_initialized() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -29,7 +28,14 @@ fn double_initialize_panics() {
 
     let admin = Address::generate(&env);
     client.initialize(&admin);
-    client.initialize(&admin);
+
+    let result = client.try_initialize(&admin);
+    assert_eq!(
+        result,
+        Err(Ok(soroban_sdk::Error::from_contract_error(
+            SettlementError::AlreadyInitialized as u32
+        )))
+    );
 }
 
 #[test]

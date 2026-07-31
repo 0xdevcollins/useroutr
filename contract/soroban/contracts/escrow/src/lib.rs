@@ -1,6 +1,7 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env};
-use soroban_sdk::panic_with_error;
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Env,
+};
 
 #[contracttype]
 pub enum DataKey {
@@ -10,7 +11,7 @@ pub enum DataKey {
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SettlementError {
-    AlreadyInitialized = 8,
+    AlreadyInitialized = 1,
 }
 
 #[contract]
