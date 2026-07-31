@@ -1,4 +1,5 @@
 import { Prisma, PayoutStatus, DestType } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { PayoutsService } from './payouts.service';
 import {
   EXECUTE_PAYOUT_BATCH_JOB,
@@ -22,6 +23,7 @@ interface MockPayout {
   confirmedAt: Date | null;
   confirmationCodeHash: string | null;
   confirmationCodeExpiresAt: Date | null;
+  confirmationAttempts: number;
   completedAt: Date | null;
   failureReason: string | null;
   batchId: string | null;
@@ -53,6 +55,7 @@ describe('PayoutsService', () => {
 
   const queue = {
     add: jest.fn(),
+    remove: jest.fn(),
     removeRepeatableByKey: jest.fn(),
   };
   const prisma = {
@@ -68,6 +71,7 @@ describe('PayoutsService', () => {
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     recipient: {
       findFirst: jest.fn(),
@@ -127,6 +131,7 @@ describe('PayoutsService', () => {
       confirmedAt: overrides.confirmedAt ?? null,
       confirmationCodeHash: overrides.confirmationCodeHash ?? null,
       confirmationCodeExpiresAt: overrides.confirmationCodeExpiresAt ?? null,
+      confirmationAttempts: overrides.confirmationAttempts ?? 0,
       completedAt: overrides.completedAt ?? null,
       failureReason: overrides.failureReason ?? null,
       batchId: overrides.batchId ?? null,
@@ -167,6 +172,7 @@ describe('PayoutsService', () => {
     payoutCounter = 0;
 
     queue.add.mockResolvedValue({});
+    queue.remove.mockResolvedValue(1);
     queue.removeRepeatableByKey.mockResolvedValue(undefined);
     webhooks.dispatch.mockResolvedValue(undefined);
     stellar.sendPayment.mockResolvedValue('stellar_tx_hash');
@@ -196,6 +202,7 @@ describe('PayoutsService', () => {
       }) => makePayout({ id: where.id, ...data }),
     );
     prisma.recurringPayout.findUnique.mockResolvedValue(null);
+    prisma.recurringPayout.updateMany.mockResolvedValue({ count: 1 });
     prisma.recurringPayout.findMany.mockResolvedValue([]);
     prisma.recurringPayout.create.mockImplementation(
       async ({ data }: { data: Partial<MockRecurringPayout> }) =>
@@ -445,8 +452,8 @@ describe('PayoutsService', () => {
         scheduledAt: now,
       }),
     });
-    expect(prisma.recurringPayout.update).toHaveBeenCalledWith({
-      where: { id: 'recurring_1' },
+    expect(prisma.recurringPayout.updateMany).toHaveBeenCalledWith({
+      where: { id: 'recurring_1', active: true, nextRunAt: now },
       data: {
         lastRunAt: now,
         nextRunAt: new Date('2026-07-29T12:00:00.000Z'),
@@ -457,6 +464,84 @@ describe('PayoutsService', () => {
       { payoutId: 'generated_1' },
       expect.objectContaining({ jobId: 'payout-generated_1' }),
     );
+  });
+
+  it('does not generate a payout when the recurring run is not yet due', async () => {
+    const recurring = makeRecurring({
+      id: 'recurring_future',
+      nextRunAt: new Date(now.getTime() + 60_000),
+    });
+    prisma.recurringPayout.findUnique.mockResolvedValueOnce(recurring);
+
+    await service.processRecurringPayout('recurring_future');
+
+    expect(prisma.recurringPayout.updateMany).not.toHaveBeenCalled();
+    expect(prisma.payout.create).not.toHaveBeenCalled();
+  });
+
+  it('does not generate a payout when another worker already claimed the run', async () => {
+    const recurring = makeRecurring({ id: 'recurring_raced', nextRunAt: now });
+    prisma.recurringPayout.findUnique.mockResolvedValueOnce(recurring);
+    prisma.recurringPayout.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await service.processRecurringPayout('recurring_raced');
+
+    expect(prisma.payout.create).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('removes any stale job before re-enqueuing a payout so retries execute', async () => {
+    const failed = makePayout({ id: 'retry_1', status: PayoutStatus.FAILED });
+    prisma.payout.findUnique.mockResolvedValueOnce(failed);
+    prisma.payout.update.mockResolvedValueOnce(
+      makePayout({ id: 'retry_1', status: PayoutStatus.PENDING }),
+    );
+
+    await service.retry('retry_1', merchantId);
+
+    expect(queue.remove).toHaveBeenCalledWith('payout-retry_1');
+    expect(queue.add).toHaveBeenCalledWith(
+      EXECUTE_PAYOUT_JOB,
+      { payoutId: 'retry_1' },
+      expect.objectContaining({ jobId: 'payout-retry_1' }),
+    );
+    const removeOrder = queue.remove.mock.invocationCallOrder[0];
+    const addOrder = queue.add.mock.invocationCallOrder[0];
+    expect(removeOrder).toBeLessThan(addOrder);
+  });
+
+  it('fails the payout after too many invalid confirmation attempts', async () => {
+    const pending = makePayout({
+      id: 'confirm_1',
+      status: PayoutStatus.REQUIRES_CONFIRMATION,
+      confirmationCodeHash: bcrypt.hashSync('654321', 4),
+      confirmationCodeExpiresAt: new Date(now.getTime() + 600_000),
+    });
+    prisma.payout.findUnique.mockResolvedValueOnce(pending);
+    prisma.payout.update.mockResolvedValueOnce(
+      makePayout({
+        id: 'confirm_1',
+        status: PayoutStatus.REQUIRES_CONFIRMATION,
+        confirmationAttempts: 5,
+      }),
+    );
+
+    await expect(
+      service.confirm('confirm_1', merchantId, { code: '000000' }),
+    ).rejects.toThrow('Too many invalid confirmation attempts');
+
+    expect(prisma.payout.update).toHaveBeenCalledWith({
+      where: { id: 'confirm_1' },
+      data: { confirmationAttempts: { increment: 1 } },
+    });
+    expect(prisma.payout.update).toHaveBeenCalledWith({
+      where: { id: 'confirm_1' },
+      data: {
+        status: PayoutStatus.FAILED,
+        failureReason: 'Too many invalid confirmation attempts',
+      },
+    });
+    expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('reconciles persisted scheduled and recurring jobs on bootstrap', async () => {

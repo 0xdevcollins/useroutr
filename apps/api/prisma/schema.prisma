@@ -50,7 +50,7 @@ model Merchant {
   settlementKey     MerchantSettlementKey?
   recipients        Recipient[]
   recurringPayouts  RecurringPayout[]
-  balance           MerchantBalance?
+  balances          MerchantBalance[]
   ledgerEntries     MerchantLedgerEntry[]
 }
 
@@ -308,6 +308,7 @@ model Payout {
   confirmedAt     DateTime?
   confirmationCodeHash String?
   confirmationCodeExpiresAt DateTime?
+  confirmationAttempts Int  @default(0)
   completedAt     DateTime?
   failureReason   String?
   batchId         String?
@@ -352,14 +353,18 @@ model RecurringPayout {
   @@index([recipientId])
 }
 
+// One row per merchant per currency — balances in different currencies must
+// never be summed into a single amount.
 model MerchantBalance {
-  merchantId      String   @id
+  merchantId      String
   availableAmount Decimal  @default(0) @db.Decimal(36, 18)
   reservedAmount  Decimal  @default(0) @db.Decimal(36, 18)
-  currency        String   @default("USD")
+  currency        String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@id([merchantId, currency])
 }
 
 model MerchantLedgerEntry {
@@ -374,6 +379,8 @@ model MerchantLedgerEntry {
   createdAt   DateTime                @default(now())
   merchant    Merchant                @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
+  // A payment may be credited at most once, even under concurrent webhooks.
+  @@unique([paymentId, type])
   @@index([merchantId, createdAt])
   @@index([payoutId])
   @@index([paymentId])

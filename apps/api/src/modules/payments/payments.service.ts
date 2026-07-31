@@ -254,43 +254,56 @@ export class PaymentsService implements OnModuleInit {
     return updatedPayment;
   }
 
+  // Idempotent: the unique (paymentId, type) ledger constraint guarantees a
+  // payment is credited at most once, even under concurrent webhook delivery.
+  // The ledger entry is created first so a duplicate aborts the transaction
+  // before the balance increment.
   private async creditMerchantBalance(payment: Payment): Promise<void> {
     const amount = payment.destAmount ?? payment.sourceAmount;
     const currency = payment.destAsset || payment.sourceAsset;
     if (!amount || !currency) return;
 
-    const existingCredit = await this.prisma.merchantLedgerEntry.findFirst({
-      where: {
-        merchantId: payment.merchantId,
-        paymentId: payment.id,
-        type: MerchantLedgerEntryType.CREDIT,
-      },
-    });
-    if (existingCredit) return;
-
-    await this.prisma.$transaction([
-      this.prisma.merchantBalance.upsert({
-        where: { merchantId: payment.merchantId },
-        create: {
-          merchantId: payment.merchantId,
-          availableAmount: amount,
-          currency,
-        },
-        update: {
-          availableAmount: { increment: amount },
-        },
-      }),
-      this.prisma.merchantLedgerEntry.create({
-        data: {
-          merchantId: payment.merchantId,
-          paymentId: payment.id,
-          type: MerchantLedgerEntryType.CREDIT,
-          amount,
-          currency,
-          description: 'Payment completion credit',
-        },
-      }),
-    ]);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.merchantLedgerEntry.create({
+          data: {
+            merchantId: payment.merchantId,
+            paymentId: payment.id,
+            type: MerchantLedgerEntryType.CREDIT,
+            amount,
+            currency,
+            description: 'Payment completion credit',
+          },
+        }),
+        this.prisma.merchantBalance.upsert({
+          where: {
+            merchantId_currency: {
+              merchantId: payment.merchantId,
+              currency,
+            },
+          },
+          create: {
+            merchantId: payment.merchantId,
+            availableAmount: amount,
+            currency,
+          },
+          update: {
+            availableAmount: { increment: amount },
+          },
+        }),
+      ]);
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        this.logger.log(
+          `Payment ${payment.id} already credited — skipping duplicate credit`,
+        );
+        return;
+      }
+      throw err;
+    }
   }
 
   async findExpiredLocked(): Promise<Payment[]> {
@@ -1164,10 +1177,6 @@ export class PaymentsService implements OnModuleInit {
         succeededAt: new Date().toISOString(),
       },
     });
-    const creditAmount = payment.destAmount ?? payment.sourceAmount ?? 0;
-    const creditCurrency = payment.destAsset || payment.sourceAsset || 'USD';
-    const shouldCredit = payment.status !== PaymentStatus.COMPLETED;
-
     await this.prisma.$transaction([
       this.prisma.payment.update({
         where: { id: payment.id },
@@ -1177,31 +1186,6 @@ export class PaymentsService implements OnModuleInit {
           metadata: updatedMetadata,
         },
       }),
-      ...(shouldCredit
-        ? [
-            this.prisma.merchantBalance.upsert({
-              where: { merchantId: payment.merchantId },
-              create: {
-                merchantId: payment.merchantId,
-                availableAmount: creditAmount,
-                currency: creditCurrency,
-              },
-              update: {
-                availableAmount: { increment: creditAmount },
-              },
-            }),
-            this.prisma.merchantLedgerEntry.create({
-              data: {
-                merchantId: payment.merchantId,
-                paymentId: payment.id,
-                type: MerchantLedgerEntryType.CREDIT,
-                amount: creditAmount,
-                currency: creditCurrency,
-                description: 'Payment completion credit',
-              },
-            }),
-          ]
-        : []),
       this.prisma.webhookEvent.create({
         data: {
           merchantId: payment.merchantId,
@@ -1223,6 +1207,8 @@ export class PaymentsService implements OnModuleInit {
         },
       }),
     ]);
+
+    await this.creditMerchantBalance(payment);
   }
 
   private async handlePaymentIntentFailed(event: Stripe.Event) {

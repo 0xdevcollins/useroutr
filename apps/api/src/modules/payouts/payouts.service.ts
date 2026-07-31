@@ -74,6 +74,8 @@ function stellarUsdcAsset(network?: string): string {
   return `USDC:${issuer}`;
 }
 
+const MAX_CONFIRMATION_ATTEMPTS = 5;
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -98,6 +100,15 @@ export class PayoutsService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    const rawThreshold = this.config.get<string>('PAYOUT_2FA_THRESHOLD');
+    if (rawThreshold !== undefined) {
+      const threshold = Number(rawThreshold);
+      if (!Number.isFinite(threshold) || threshold <= 0) {
+        this.logger.warn(
+          `PAYOUT_2FA_THRESHOLD is set to "${rawThreshold}" which is not a positive number — high-value payout confirmation is disabled`,
+        );
+      }
+    }
     await this.reconcileScheduledPayoutJobs();
     await this.reconcileRecurringPayoutJobs();
     await this.enqueueRecurringDispatcher();
@@ -342,6 +353,19 @@ export class PayoutsService implements OnApplicationBootstrap {
 
     const ok = await bcrypt.compare(dto.code, payout.confirmationCodeHash);
     if (!ok) {
+      const attempted = await this.prisma.payout.update({
+        where: { id: payout.id },
+        data: { confirmationAttempts: { increment: 1 } },
+      });
+      if (attempted.confirmationAttempts >= MAX_CONFIRMATION_ATTEMPTS) {
+        await this.failPayout(
+          attempted,
+          'Too many invalid confirmation attempts',
+        );
+        throw new BadRequestException(
+          'Too many invalid confirmation attempts — payout failed, use retry to request a new code',
+        );
+      }
       throw new BadRequestException('Invalid payout confirmation code');
     }
 
@@ -352,6 +376,7 @@ export class PayoutsService implements OnApplicationBootstrap {
         confirmedAt: new Date(),
         confirmationCodeHash: null,
         confirmationCodeExpiresAt: null,
+        confirmationAttempts: 0,
       },
     });
 
@@ -411,7 +436,7 @@ export class PayoutsService implements OnApplicationBootstrap {
   ): Promise<RecurringPayout> {
     const existing = await this.getRecurring(id, merchantId);
     const finalDto =
-      dto.recipientId || dto.destination
+      dto.recipientId || dto.destination || dto.destinationType
         ? await this.resolveRecipientDetails(merchantId, {
             recipientId: dto.recipientId ?? existing.recipientId ?? undefined,
             recipientName: dto.recipientName ?? existing.recipientName,
@@ -480,10 +505,16 @@ export class PayoutsService implements OnApplicationBootstrap {
       );
     }
 
-    return this.prisma.payout.update({
+    const cancelled = await this.prisma.payout.update({
       where: { id },
       data: { status: PayoutStatus.CANCELLED },
     });
+
+    // Best-effort queue cleanup; the status guard in processQueuedPayout
+    // protects correctness if the job cannot be removed.
+    await this.payoutQueue.remove(`payout-${id}`).catch(() => undefined);
+
+    return cancelled;
   }
 
   // ── Retry ─────────────────────────────────────────────────────────────────
@@ -509,6 +540,7 @@ export class PayoutsService implements OnApplicationBootstrap {
         failureReason: null,
         confirmationCodeHash: confirmation?.hash ?? null,
         confirmationCodeExpiresAt: confirmation?.expiresAt ?? null,
+        confirmationAttempts: 0,
       },
     });
 
@@ -577,6 +609,24 @@ export class PayoutsService implements OnApplicationBootstrap {
     if (!recurring || !recurring.active) return;
 
     const now = new Date();
+    if (recurring.nextRunAt > now) return;
+
+    // Atomically claim this run: both the per-record repeatable job and the
+    // due-recurring dispatcher can race here, and only one may generate a
+    // payout. The nextRunAt equality check makes the claim first-wins.
+    const claimed = await this.prisma.recurringPayout.updateMany({
+      where: {
+        id: recurring.id,
+        active: true,
+        nextRunAt: recurring.nextRunAt,
+      },
+      data: {
+        lastRunAt: now,
+        nextRunAt: this.nextRunAfter(now, recurring.frequency),
+      },
+    });
+    if (claimed.count === 0) return;
+
     const confirmation = await this.buildConfirmationFields(
       recurring.amount.toString(),
     );
@@ -596,14 +646,6 @@ export class PayoutsService implements OnApplicationBootstrap {
         confirmationCodeHash: confirmation?.hash ?? null,
         confirmationCodeExpiresAt: confirmation?.expiresAt ?? null,
         recurringPayoutId: recurring.id,
-      },
-    });
-
-    await this.prisma.recurringPayout.update({
-      where: { id: recurring.id },
-      data: {
-        lastRunAt: now,
-        nextRunAt: this.nextRunAfter(now, recurring.frequency),
       },
     });
 
@@ -627,6 +669,67 @@ export class PayoutsService implements OnApplicationBootstrap {
     for (const recurring of due) {
       await this.processRecurringPayout(recurring.id);
     }
+  }
+
+  // ── External settlement callbacks ─────────────────────────────────────────
+  // BANK_ACCOUNT and MOBILE_MONEY payouts are debited and left PROCESSING
+  // until the external settlement system reports the outcome. These are the
+  // only valid terminal transitions for such payouts: a failure MUST release
+  // the debited funds, never a bare status update.
+
+  async completeExternalPayout(id: string): Promise<Payout> {
+    const payout = await this.prisma.payout.findUnique({ where: { id } });
+    if (!payout) throw new NotFoundException('Payout not found');
+    if (payout.status !== PayoutStatus.PROCESSING) {
+      throw new BadRequestException(
+        `Cannot complete a payout in ${payout.status} status`,
+      );
+    }
+
+    const completed = await this.prisma.payout.update({
+      where: { id },
+      data: {
+        status: PayoutStatus.COMPLETED,
+        completedAt: new Date(),
+      },
+    });
+
+    this.eventsService.emitPayoutStatus(
+      payout.merchantId,
+      payout.id,
+      PayoutStatus.COMPLETED,
+      {
+        amount: completed.amount.toString(),
+        currency: completed.currency,
+        updatedAt: new Date(),
+      },
+    );
+    void this.notifications
+      .notifyPayoutCompleted(payout.merchantId, payout.id, payout.recipientName)
+      .catch(() => undefined);
+    this.webhooks
+      .dispatch(
+        payout.merchantId,
+        'payout.completed',
+        this.webhookPayload(completed) as Prisma.InputJsonValue,
+      )
+      .catch(() => undefined);
+
+    return completed;
+  }
+
+  async failExternalPayout(id: string, reason: string): Promise<Payout> {
+    const payout = await this.prisma.payout.findUnique({ where: { id } });
+    if (!payout) throw new NotFoundException('Payout not found');
+    if (payout.status !== PayoutStatus.PROCESSING) {
+      throw new BadRequestException(
+        `Cannot fail a payout in ${payout.status} status`,
+      );
+    }
+
+    await this.releaseDebitedFunds(payout);
+    await this.failPayout(payout, reason);
+    return this.prisma.payout.findUniqueOrThrow({ where: { id } });
   }
 
   private async processPayout(payout: Payout): Promise<void> {
@@ -661,7 +764,9 @@ export class PayoutsService implements OnApplicationBootstrap {
   ): Promise<void> {
     const destAddress = String(destination.address);
     const destAsset = this.normalizeStellarAsset(destination.asset);
-    const sourceAsset = 'native';
+    // The on-chain transfer must move the same money that was debited from the
+    // merchant ledger, so the source asset derives from the payout currency.
+    const sourceAsset = this.stellarSourceAssetForCurrency(payout.currency);
     const sourceAmount = payout.amount.toString();
     const sourceSecret = await this.getMerchantPayoutSourceSecret(
       payout.merchantId,
@@ -687,13 +792,18 @@ export class PayoutsService implements OnApplicationBootstrap {
       });
 
       const bestPath = paths[0];
+      if (!bestPath) {
+        throw new Error(
+          `No conversion path from ${sourceAsset} to ${destAsset}`,
+        );
+      }
       // Convert asset objects to the 'native' | 'CODE:issuer' strings parseAsset expects
-      const pathStrings: string[] = (bestPath?.path ?? []).map((a) =>
+      const pathStrings: string[] = (bestPath.path ?? []).map((a) =>
         assetToString(a as AssetObject),
       );
-      const destMin = (
-        parseFloat(bestPath?.destinationAmount ?? sourceAmount) * 0.99
-      ).toFixed(7);
+      const destMin = (parseFloat(bestPath.destinationAmount) * 0.99).toFixed(
+        7,
+      );
 
       txHash = await this.stellar.executePathPayment({
         sourceAsset,
@@ -738,6 +848,17 @@ export class PayoutsService implements OnApplicationBootstrap {
       .catch(() => undefined);
   }
 
+  private stellarSourceAssetForCurrency(currency: string): string {
+    const upper = currency.toUpperCase();
+    if (upper === 'XLM' || upper === 'NATIVE') return 'native';
+    if (upper === 'USDC') {
+      return stellarUsdcAsset(this.config.get<string>('STELLAR_NETWORK'));
+    }
+    throw new Error(
+      `Payout currency ${currency} cannot be sent on Stellar — no on-chain asset mapping`,
+    );
+  }
+
   private normalizeStellarAsset(asset: unknown): string {
     if (typeof asset !== 'string' || asset.trim() === '') return 'native';
 
@@ -761,7 +882,7 @@ export class PayoutsService implements OnApplicationBootstrap {
         SELECT "merchantId", 0, 0, "currency", NOW()
         FROM "Payout"
         WHERE "id" = ${payoutId}
-        ON CONFLICT ("merchantId") DO NOTHING
+        ON CONFLICT ("merchantId", "currency") DO NOTHING
       `;
 
       const payout = await tx.payout.findUnique({ where: { id: payoutId } });
@@ -772,24 +893,16 @@ export class PayoutsService implements OnApplicationBootstrap {
       const rows = await tx.$queryRaw<
         Array<{
           availableAmount: Prisma.Decimal;
-          currency: string;
         }>
       >`
-        SELECT "availableAmount", "currency"
+        SELECT "availableAmount"
         FROM "MerchantBalance"
-        WHERE "merchantId" = ${payout.merchantId}
+        WHERE "merchantId" = ${payout.merchantId} AND "currency" = ${payout.currency}
         FOR UPDATE
       `;
       const balance = rows[0];
 
-      if (!balance || balance.currency !== payout.currency) {
-        return {
-          payout,
-          failureReason: `Insufficient balance for ${payout.currency}`,
-        };
-      }
-
-      if (balance.availableAmount.lt(payout.amount)) {
+      if (!balance || balance.availableAmount.lt(payout.amount)) {
         return {
           payout,
           failureReason: `Insufficient balance for ${payout.currency}`,
@@ -797,7 +910,12 @@ export class PayoutsService implements OnApplicationBootstrap {
       }
 
       await tx.merchantBalance.update({
-        where: { merchantId: payout.merchantId },
+        where: {
+          merchantId_currency: {
+            merchantId: payout.merchantId,
+            currency: payout.currency,
+          },
+        },
         data: {
           availableAmount: { decrement: payout.amount },
         },
@@ -831,7 +949,12 @@ export class PayoutsService implements OnApplicationBootstrap {
   private async releaseDebitedFunds(payout: Payout): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await tx.merchantBalance.update({
-        where: { merchantId: payout.merchantId },
+        where: {
+          merchantId_currency: {
+            merchantId: payout.merchantId,
+            currency: payout.currency,
+          },
+        },
         data: { availableAmount: { increment: payout.amount } },
       });
       await tx.merchantLedgerEntry.create({
@@ -923,6 +1046,12 @@ export class PayoutsService implements OnApplicationBootstrap {
     const delay = payout.scheduledAt
       ? Math.max(0, payout.scheduledAt.getTime() - Date.now())
       : 0;
+
+    // BullMQ silently ignores add() when a job with this id still exists in
+    // any state — including completed jobs kept by removeOnComplete. Remove
+    // any leftover (e.g. from a previous attempt of a retried payout) first;
+    // an active job cannot be removed, and the jobId dedupe then applies.
+    await this.payoutQueue.remove(`payout-${payout.id}`).catch(() => undefined);
 
     await this.payoutQueue.add(
       EXECUTE_PAYOUT_JOB,
@@ -1106,7 +1235,12 @@ export class PayoutsService implements OnApplicationBootstrap {
     const settlementKey = await this.prisma.merchantSettlementKey.findUnique({
       where: { merchantId },
     });
-    if (!settlementKey?.managed) return undefined;
+    if (!settlementKey?.managed) {
+      this.logger.warn(
+        `Merchant ${merchantId} has no managed settlement key — payout will be funded from the platform relay account`,
+      );
+      return undefined;
+    }
 
     return this.settlement.decryptSeed(settlementKey);
   }

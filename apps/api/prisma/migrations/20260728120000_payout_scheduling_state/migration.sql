@@ -37,11 +37,11 @@ CREATE TABLE "MerchantBalance" (
   "merchantId" TEXT NOT NULL,
   "availableAmount" DECIMAL(36,18) NOT NULL DEFAULT 0,
   "reservedAmount" DECIMAL(36,18) NOT NULL DEFAULT 0,
-  "currency" TEXT NOT NULL DEFAULT 'USD',
+  "currency" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "MerchantBalance_pkey" PRIMARY KEY ("merchantId")
+  CONSTRAINT "MerchantBalance_pkey" PRIMARY KEY ("merchantId", "currency")
 );
 
 -- CreateTable
@@ -73,6 +73,9 @@ CREATE INDEX "RecurringPayout_active_nextRunAt_idx" ON "RecurringPayout"("active
 
 -- CreateIndex
 CREATE INDEX "RecurringPayout_recipientId_idx" ON "RecurringPayout"("recipientId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "MerchantLedgerEntry_paymentId_type_key" ON "MerchantLedgerEntry"("paymentId", "type");
 
 -- CreateIndex
 CREATE INDEX "MerchantLedgerEntry_merchantId_createdAt_idx" ON "MerchantLedgerEntry"("merchantId", "createdAt");
