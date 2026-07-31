@@ -1,131 +1,129 @@
 /**
- * Environment validation utilities
- * Ensures critical secrets are properly configured at startup
+ * Startup environment validation.
+ *
+ * Verifies that critical secrets are present and not left at the
+ * `.env.example` placeholder values before the application boots.
+ * Variables the app can run without in development (chain hot-wallet
+ * keys) are only enforced in production, so a fresh checkout can start
+ * the API without provisioning real wallets.
  */
 
-/**
- * List of placeholder patterns that indicate a secret has not been properly configured
- */
-const PLACEHOLDER_PATTERNS = [
-  // Generic placeholders
+/** Values copied verbatim from `.env.example` that must never be used. */
+const PLACEHOLDER_PATTERNS: RegExp[] = [
   /^your-/i,
   /^placeholder/i,
-  /^[sS]\.\.\.$/,
-  /^[gG]\.\.\.$/,
+  /^[sgc]\.\.\.$/i, // Stellar secret/public keys, Soroban contract ids
   /^0x\.\.\.$/,
-  /^[cC]\.\.\.$/,
-  // Specific template values
-  /^your-jwt-secret/i,
-  /^your-api-key-salt/i,
-  /^your-256-bit-secret/i,
-  /^your-bank-session-encryption/i,
-  /^your-bank-webhook-secret/i,
-  /^your-circle-api-key/i,
-  /^your-layerswap/i,
-  /^your-cloud-name/i,
-  /^your-cloudinary-api/i,
 ];
 
-/**
- * Critical environment variables required for API operation
- * Organized by feature/component
- */
-export const CRITICAL_ENV_VARS = {
-  // Core infrastructure
+/** When a variable must be set for the API to start. */
+type Requirement = 'always' | 'production' | 'optional';
+
+export interface CriticalEnvVar {
+  requiredIn: Requirement;
+  description: string;
+}
+
+export const CRITICAL_ENV_VARS: Record<string, CriticalEnvVar> = {
+  // Core infrastructure — nothing works without these.
   DATABASE_URL: {
-    required: true,
+    requiredIn: 'always',
     description: 'PostgreSQL connection string',
   },
   REDIS_URL: {
-    required: true,
+    requiredIn: 'always',
     description: 'Redis connection string for caching and queues',
   },
-  // Authentication
+  // Authentication.
   JWT_SECRET: {
-    required: true,
-    description: 'JWT signing secret (64 bytes base64)',
+    requiredIn: 'always',
+    description:
+      'JWT signing secret (generate via scripts/generate-secrets.sh)',
   },
-  API_KEY_SALT: {
-    required: true,
-    description: 'Salt for API key hashing',
-  },
+  // Bank rails — feature-gated, but a placeholder is always an error.
   BANK_SESSION_ENCRYPTION_KEY: {
-    required: false,
+    requiredIn: 'optional',
     description: 'AES-256 key for bank session encryption',
   },
   BANK_WEBHOOK_SECRET: {
-    required: false,
+    requiredIn: 'optional',
     description: 'Secret for bank webhook verification',
   },
-  // Stellar
+  // Chain hot wallets — only signing operations need these, so local
+  // development can run without them. Production cannot.
   STELLAR_RELAY_KEYPAIR_SECRET: {
-    required: true,
+    requiredIn: 'production',
     description: 'Stellar relay keypair secret (starts with S)',
   },
-  // EVM
   EVM_RELAY_PRIVATE_KEY: {
-    required: true,
+    requiredIn: 'production',
     description: 'EVM relay private key (0x-prefixed hex)',
   },
 };
 
-/**
- * Check if a value matches any placeholder pattern
- */
+/** Minimum lengths for secrets where a short value defeats the purpose. */
+const MIN_LENGTHS: Record<string, number> = {
+  JWT_SECRET: 32,
+};
+
+export class EnvValidationError extends Error {
+  constructor(public readonly problems: string[]) {
+    super(
+      [
+        'Environment configuration is invalid:',
+        ...problems.map((p) => `  - ${p}`),
+        'Generate secrets with: ./scripts/generate-secrets.sh',
+        'See the "Pre-Beta Environment Setup Guide" in README.md for details.',
+      ].join('\n'),
+    );
+    this.name = 'EnvValidationError';
+  }
+}
+
+/** True when a value is still one of the `.env.example` placeholders. */
 export function isPlaceholder(value: string | undefined): boolean {
   if (!value) return false;
   return PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 /**
- * Validate all critical environment variables at startup
- * Throws an error if any critical variable is missing or set to a placeholder
+ * Validate critical environment variables. Throws {@link EnvValidationError}
+ * listing every problem found — it never exits the process itself, so it
+ * stays unit-testable and callers decide how to fail.
  */
-export function validateEnvironmentConfig(): void {
-  const errors: string[] = [];
+export function validateEnvironmentConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  const problems: string[] = [];
+  const isProduction = env.NODE_ENV === 'production';
 
-  // Check each critical variable
-  for (const [varName, config] of Object.entries(CRITICAL_ENV_VARS)) {
-    const value = process.env[varName];
+  for (const [name, spec] of Object.entries(CRITICAL_ENV_VARS)) {
+    const value = env[name];
+    const required =
+      spec.requiredIn === 'always' ||
+      (spec.requiredIn === 'production' && isProduction);
 
-    // Check if required variable is missing
-    if (config.required && !value) {
-      errors.push(
-        `STARTUP FAILED: ${varName} is missing. Set a valid value. (${config.description})`,
+    if (!value) {
+      if (required) {
+        problems.push(`${name} is not set. ${spec.description}.`);
+      }
+      continue;
+    }
+
+    if (isPlaceholder(value)) {
+      problems.push(
+        `${name} is still set to a placeholder value. ${spec.description}.`,
       );
       continue;
     }
 
-    // Check if value is a placeholder
-    if (value && isPlaceholder(value)) {
-      errors.push(
-        `STARTUP FAILED: ${varName} is a placeholder or missing. Set a valid value. (${config.description})`,
-      );
+    const minLength = MIN_LENGTHS[name];
+    if (minLength && value.length < minLength) {
+      problems.push(`${name} must be at least ${minLength} characters long.`);
     }
   }
 
-  // Additional validations for specific variables
-  const jwtSecret = process.env.JWT_SECRET;
-  if (jwtSecret && jwtSecret.length < 32) {
-    errors.push(
-      `STARTUP FAILED: JWT_SECRET must be at least 32 characters (256 bits recommended)`,
-    );
+  if (problems.length > 0) {
+    throw new EnvValidationError(problems);
   }
-
-  const apiKeySalt = process.env.API_KEY_SALT;
-  if (apiKeySalt && apiKeySalt.length < 16) {
-    errors.push(
-      `STARTUP FAILED: API_KEY_SALT must be at least 16 characters`,
-    );
-  }
-
-  // If there are errors, throw and halt startup
-  if (errors.length > 0) {
-    console.error('\n❌ Environment Configuration Errors:\n');
-    errors.forEach((error) => console.error(error));
-    console.error('\n📋 To generate secrets, run: ./scripts/generate-secrets.sh\n');
-    process.exit(1);
-  }
-
-  console.log('✅ Environment configuration validated successfully');
 }

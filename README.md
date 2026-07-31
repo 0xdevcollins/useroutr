@@ -88,7 +88,6 @@ Set at least these for local API startup:
 - `DATABASE_URL`
 - `REDIS_URL=redis://localhost:6379`
 - `JWT_SECRET`
-- `API_KEY_SALT`
 
 ### 4) Start local infrastructure
 
@@ -158,7 +157,6 @@ Generate these using the provided script:
 | Variable | Description | Length | Source |
 |----------|-------------|--------|--------|
 | `JWT_SECRET` | JWT signing key (HS256) | 64+ bytes (base64) | Run `./scripts/generate-secrets.sh` |
-| `API_KEY_SALT` | Salt for API key hashing | 32+ bytes (base64) | Run `./scripts/generate-secrets.sh` |
 | `BANK_SESSION_ENCRYPTION_KEY` | AES-256 key for sensitive data | 32 bytes (base64) | Run `./scripts/generate-secrets.sh` |
 | `BANK_WEBHOOK_SECRET` | Verify bank webhook integrity | 32+ bytes (base64) | Run `./scripts/generate-secrets.sh` |
 | `JWT_EXPIRY` | JWT token expiration | N/A | Set to `7d` or preferred duration |
@@ -304,12 +302,10 @@ Minimum required for `npm run start:dev`:
 DATABASE_URL=postgresql://useroutr:password@localhost:5434/useroutr
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=<run: ./scripts/generate-secrets.sh>
-API_KEY_SALT=<run: ./scripts/generate-secrets.sh>
-BANK_SESSION_ENCRYPTION_KEY=<run: ./scripts/generate-secrets.sh>
-STELLAR_RELAY_KEYPAIR_SECRET=S<generated-via-stellar-cli>
-EVM_RELAY_PRIVATE_KEY=0x<generated-private-key>
 NODE_ENV=development
 PORT=3000
+# STELLAR_RELAY_KEYPAIR_SECRET and EVM_RELAY_PRIVATE_KEY are only required
+# when NODE_ENV=production; payment signing features need them at runtime.
 ```
 
 #### Beta / Staging

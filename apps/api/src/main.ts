@@ -1,16 +1,30 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { validateEnvironmentConfig } from './common/config/env-validation';
+import {
+  EnvValidationError,
+  validateEnvironmentConfig,
+} from './common/config/env-validation';
 
 async function bootstrap() {
-  // Validate critical environment variables before starting the application
-  validateEnvironmentConfig();
+  // Validate critical environment variables before starting the application.
+  // dotenv/config is imported at the top of this file, so .env is already
+  // loaded into process.env by the time this runs.
+  try {
+    validateEnvironmentConfig();
+  } catch (err) {
+    if (err instanceof EnvValidationError) {
+      new Logger('EnvValidation').error(err.message);
+      process.exit(1);
+    }
+    throw err;
+  }
 
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
