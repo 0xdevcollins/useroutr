@@ -80,6 +80,22 @@ fn set_fee_bps_above_limit_panics() {
 }
 
 #[test]
+fn double_initialize_fails_with_already_initialized() {
+    let (env, contract_id, _token_address, admin, treasury) = setup();
+    let client = FeeCollectorContractClient::new(&env, &contract_id);
+
+    client.initialize(&admin, &75, &treasury);
+
+    let result = client.try_initialize(&admin, &75, &treasury);
+    assert_eq!(
+        result,
+        Err(Ok(soroban_sdk::Error::from_contract_error(
+            FeeCollectorError::AlreadyInitialized as u32
+        )))
+    );
+}
+
+#[test]
 #[should_panic]
 fn deduct_before_initialize_panics() {
     let (env, contract_id, token_address, _admin, _treasury) = setup();
