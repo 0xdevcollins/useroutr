@@ -82,10 +82,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Same pin as ci.yml's test job: a newer stable rejects `ethnum 1.5.2`
+      # (transitive via soroban-sdk) with E0512, and deploy.sh runs the tests.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.93.0
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32-unknown-unknown, wasm32v1-none
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -100,31 +102,40 @@ jobs:
       - name: Install Stellar CLI
         run: cargo install --locked stellar-cli
 
-      - name: Run tests
-        working-directory: contract/soroban
-        run: cargo test --workspace
-
-      - name: Build optimized WASM
-        working-directory: contract/soroban
-        run: cargo build --release --target wasm32-unknown-unknown
-
+      # deploy.sh builds, deploys, records ids and initializes. Keeping CI on
+      # the same script as local deploys is the point — an inline loop here
+      # drifts from what operators actually run.
       - name: Deploy to Stellar
         working-directory: contract/soroban
         env:
           STELLAR_SECRET_KEY: ${{ secrets.STELLAR_SECRET_KEY }}
-          STELLAR_NETWORK: ${{ inputs.network }}
-        run: |
-          NETWORK_FLAG=""
-          if [ "${{ inputs.network }}" = "testnet" ]; then
-            NETWORK_FLAG="--network testnet"
-          else
-            NETWORK_FLAG="--network public"
-          fi
+          STELLAR_SOROBAN_RPC_URL: ${{ secrets.STELLAR_SOROBAN_RPC_URL }}
+          FEE_COLLECTOR_ADMIN: ${{ secrets.FEE_COLLECTOR_ADMIN }}
+          FEE_COLLECTOR_TREASURY: ${{ secrets.FEE_COLLECTOR_TREASURY }}
+        run: ./scripts/deploy.sh ${{ inputs.network }} --yes
 
-          for wasm in target/wasm32-unknown-unknown/release/*.wasm; do
-            echo "Deploying $(basename $wasm)..."
-            stellar contract deploy \
-              --wasm "$wasm" \
-              --source "$STELLAR_SECRET_KEY" \
-              $NETWORK_FLAG
-          done
+      - name: Verify deployment
+        working-directory: contract/soroban
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_SECRET_KEY }}
+          STELLAR_SOROBAN_RPC_URL: ${{ secrets.STELLAR_SOROBAN_RPC_URL }}
+        run: ./scripts/verify.sh ${{ inputs.network }}
+
+      # The ids live in the runner's .env, which is discarded — surface them so
+      # they can be copied into the deployment record and the API's config.
+      - name: Report contract ids
+        if: always()
+        working-directory: contract/soroban
+        run: |
+          record="deployments/${{ inputs.network }}.json"
+          if [ ! -f "$record" ]; then
+            echo "No deployment record — deploy did not reach the record step." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "### Deployed contract ids"
+            echo '```json'
+            cat "$record"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
