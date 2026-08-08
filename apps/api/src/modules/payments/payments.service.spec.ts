@@ -57,8 +57,12 @@ describe('PaymentsService', () => {
     webhookEvent: {
       create: jest.fn(),
     },
+    merchant: {
+      findUnique: jest.fn(),
+    },
     merchantBalance: {
       upsert: jest.fn(),
+      update: jest.fn(),
     },
     merchantLedgerEntry: {
       create: jest.fn(),
@@ -119,6 +123,8 @@ describe('PaymentsService', () => {
     prisma.payment.findUnique.mockResolvedValue(paymentRecord);
     prisma.payment.update.mockResolvedValue(paymentRecord);
     prisma.webhookEvent.create.mockResolvedValue({});
+    // Escrow off by default — the credit path checks the merchant's opt-in.
+    prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: false });
     prisma.merchantBalance.upsert.mockResolvedValue({});
     prisma.merchantLedgerEntry.create.mockResolvedValue({});
     prisma.merchantLedgerEntry.findFirst.mockResolvedValue(null);
@@ -224,6 +230,69 @@ describe('PaymentsService', () => {
         data: expect.objectContaining({ eventType: 'payment.completed' }),
       }),
     );
+  });
+
+  describe('escrow hold on completion', () => {
+    const completeAPayment = async () => {
+      stripeMock.webhooks.constructEvent.mockReturnValue({
+        id: 'evt_success',
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: 'pi_123',
+            status: 'succeeded',
+            metadata: { paymentId: 'pay_123' },
+          },
+        },
+      });
+      await service.handleStripeWebhook(
+        'stripe-signature',
+        Buffer.from('payload'),
+      );
+    };
+
+    it('credits spendable balance when the merchant has not opted in', async () => {
+      prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: false });
+
+      await completeAPayment();
+
+      expect(prisma.merchantBalance.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            availableAmount: expect.anything(),
+          }),
+        }),
+      );
+      const call = prisma.merchantBalance.upsert.mock.calls[0][0];
+      expect(call.update.reservedAmount).toBeUndefined();
+    });
+
+    it('holds the credit as reserved when the merchant has opted in', async () => {
+      // The point of the whole feature: an escrowed payment must not become
+      // spendable at completion, or the dispute window protects nothing.
+      prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: true });
+
+      await completeAPayment();
+
+      const call = prisma.merchantBalance.upsert.mock.calls[0][0];
+      expect(call.update.reservedAmount).toBeDefined();
+      expect(call.update.availableAmount).toBeUndefined();
+      expect(call.create.availableAmount).toBe(0);
+    });
+
+    it('labels the held ledger entry so the merchant can tell why', async () => {
+      prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: true });
+
+      await completeAPayment();
+
+      expect(prisma.merchantLedgerEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            description: 'Payment completion credit (held in escrow)',
+          }),
+        }),
+      );
+    });
   });
 
   describe('createFromLink', () => {

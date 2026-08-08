@@ -263,6 +263,17 @@ export class PaymentsService implements OnModuleInit {
     const currency = payment.destAsset || payment.sourceAsset;
     if (!amount || !currency) return;
 
+    // Merchants who opted into escrow do not get spendable funds at
+    // completion — the money is held on-chain for the dispute window, and the
+    // ledger mirrors that as `reservedAmount` so the dashboard can show a held
+    // balance without querying Soroban. `releaseEscrowedBalance` moves it to
+    // `availableAmount` once the chain says the escrow released.
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: payment.merchantId },
+      select: { escrowEnabled: true },
+    });
+    const held = merchant?.escrowEnabled === true;
+
     try {
       await this.prisma.$transaction([
         this.prisma.merchantLedgerEntry.create({
@@ -272,7 +283,9 @@ export class PaymentsService implements OnModuleInit {
             type: MerchantLedgerEntryType.CREDIT,
             amount,
             currency,
-            description: 'Payment completion credit',
+            description: held
+              ? 'Payment completion credit (held in escrow)'
+              : 'Payment completion credit',
           },
         }),
         this.prisma.merchantBalance.upsert({
@@ -284,12 +297,13 @@ export class PaymentsService implements OnModuleInit {
           },
           create: {
             merchantId: payment.merchantId,
-            availableAmount: amount,
+            availableAmount: held ? 0 : amount,
+            reservedAmount: held ? amount : 0,
             currency,
           },
-          update: {
-            availableAmount: { increment: amount },
-          },
+          update: held
+            ? { reservedAmount: { increment: amount } }
+            : { availableAmount: { increment: amount } },
         }),
       ]);
     } catch (err) {
@@ -304,6 +318,53 @@ export class PaymentsService implements OnModuleInit {
       }
       throw err;
     }
+  }
+
+  /**
+   * Move an escrowed credit from held to spendable. Called once the escrow
+   * contract reports the funds released — never on a timer of our own, because
+   * the chain is what actually governs whether the merchant has the money.
+   *
+   * `payerAmount` is non-zero when a dispute was resolved as a partial or full
+   * refund: that share never becomes the merchant's, so it is debited rather
+   * than released.
+   */
+  async releaseEscrowedBalance(
+    payment: Payment,
+    opts?: { payerAmount?: Prisma.Decimal | number },
+  ): Promise<void> {
+    const amount = payment.destAmount ?? payment.sourceAmount;
+    const currency = payment.destAsset || payment.sourceAsset;
+    if (!amount || !currency) return;
+
+    const refunded = new Prisma.Decimal(opts?.payerAmount ?? 0);
+    const toMerchant = new Prisma.Decimal(amount).minus(refunded);
+
+    await this.prisma.$transaction([
+      this.prisma.merchantBalance.update({
+        where: {
+          merchantId_currency: { merchantId: payment.merchantId, currency },
+        },
+        data: {
+          reservedAmount: { decrement: amount },
+          availableAmount: { increment: toMerchant },
+        },
+      }),
+      ...(refunded.isZero()
+        ? []
+        : [
+            this.prisma.merchantLedgerEntry.create({
+              data: {
+                merchantId: payment.merchantId,
+                paymentId: payment.id,
+                type: MerchantLedgerEntryType.ESCROW_REFUND,
+                amount: refunded,
+                currency,
+                description: 'Escrow dispute resolved in payer favour',
+              },
+            }),
+          ]),
+    ]);
   }
 
   async findExpiredLocked(): Promise<Payment[]> {

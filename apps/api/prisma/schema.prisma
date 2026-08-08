@@ -18,6 +18,10 @@ model Merchant {
   id                String         @id @default(cuid())
   name              String
   email             String         @unique
+  // Escrow opt-in. Off by default: turning it on delays the merchant's own
+  // access to funds by escrowWindowSeconds, so it is theirs to choose.
+  escrowEnabled       Boolean      @default(false)
+  escrowWindowSeconds Int          @default(604800) // 7 days
   passwordHash      String
   emailVerifiedAt   DateTime?
   verificationCodeHash      String?
@@ -170,6 +174,12 @@ model Payment {
   // confirms; populated by the cctp module before the destination mint.
   cctpNonce       String?
   cctpAttestation String?
+  // Soroban escrow. `escrowId` is the contract's 32-byte id as hex; state
+  // mirrors EscrowState on-chain so the dashboard does not have to query
+  // Soroban to render a held balance. The chain is authoritative.
+  escrowId        String?        @unique
+  escrowState     String?
+  escrowReleaseAt DateTime?
   // Idempotency
   idempotencyKey  String?        @unique
   // Metadata
@@ -433,6 +443,9 @@ enum MerchantLedgerEntryType {
   CREDIT
   PAYOUT_DEBIT
   PAYOUT_RELEASE
+  // An escrow dispute resolved wholly or partly in the payer's favour: the
+  // held credit never becomes the merchant's, so it is debited back out.
+  ESCROW_REFUND
 }
 
 // ── Webhooks ──────────────────────────────────────────────────

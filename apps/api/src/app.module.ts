@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
 import { StellarModule } from './modules/stellar/stellar.module';
+import { EscrowModule } from './modules/escrow/escrow.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
@@ -62,6 +63,7 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
       },
     ]),
     StellarModule,
+    EscrowModule,
     MerchantModule,
     PaymentsModule,
     QuotesModule,
