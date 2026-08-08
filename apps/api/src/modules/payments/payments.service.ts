@@ -263,16 +263,24 @@ export class PaymentsService implements OnModuleInit {
     const currency = payment.destAsset || payment.sourceAsset;
     if (!amount || !currency) return;
 
-    // Merchants who opted into escrow do not get spendable funds at
-    // completion — the money is held on-chain for the dispute window, and the
-    // ledger mirrors that as `reservedAmount` so the dashboard can show a held
-    // balance without querying Soroban. `releaseEscrowedBalance` moves it to
-    // `availableAmount` once the chain says the escrow released.
+    // Merchants who opted into a settlement hold do not get spendable funds at
+    // completion; the credit lands in `reservedAmount` and is moved across when
+    // the hold ends.
+    //
+    // Whether that hold is backed by the escrow contract or by this ledger
+    // alone depends on the payer. A Stellar-native payer has an account that
+    // can authorize `lock` and an address the contract can refund to on a
+    // dispute. A CCTP payer has neither — their funds arrive minted by Circle
+    // and their wallet is on another chain entirely — so for those payments
+    // this is a policy hold, and describing it as escrow would claim a
+    // guarantee the chain is not making. `payment.escrowId` records which
+    // backing a payment actually received.
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: payment.merchantId },
-      select: { escrowEnabled: true },
+      select: { settlementHoldEnabled: true },
     });
-    const held = merchant?.escrowEnabled === true;
+    const held = merchant?.settlementHoldEnabled === true;
+    const escrowBacked = held && this.canBeEscrowBacked(payment);
 
     try {
       await this.prisma.$transaction([
@@ -283,9 +291,11 @@ export class PaymentsService implements OnModuleInit {
             type: MerchantLedgerEntryType.CREDIT,
             amount,
             currency,
-            description: held
-              ? 'Payment completion credit (held in escrow)'
-              : 'Payment completion credit',
+            description: !held
+              ? 'Payment completion credit'
+              : escrowBacked
+                ? 'Payment completion credit (held on-chain in escrow)'
+                : 'Payment completion credit (held for settlement window)',
           },
         }),
         this.prisma.merchantBalance.upsert({
@@ -321,7 +331,21 @@ export class PaymentsService implements OnModuleInit {
   }
 
   /**
-   * Move an escrowed credit from held to spendable. Called once the escrow
+   * Whether this payment's funds can actually be held in the escrow contract.
+   *
+   * Only a Stellar-native payer qualifies. The contract's `lock` pulls from the
+   * payer and requires that account's signature, and a dispute resolved in the
+   * payer's favour pays the address stored as `payer` — so a payer who has no
+   * Stellar account can neither fund the escrow nor be refunded by it. Locking
+   * a CCTP payment with our own holding account as `payer` would mean a
+   * "refund" landing back with us, which is not payer protection.
+   */
+  private canBeEscrowBacked(payment: Payment): boolean {
+    return (payment.sourceChain ?? '').toLowerCase() === 'stellar';
+  }
+
+  /**
+   * Move a held credit from reserved to spendable. Called once the escrow
    * contract reports the funds released — never on a timer of our own, because
    * the chain is what actually governs whether the merchant has the money.
    *

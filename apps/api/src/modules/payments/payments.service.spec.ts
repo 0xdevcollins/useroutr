@@ -124,7 +124,9 @@ describe('PaymentsService', () => {
     prisma.payment.update.mockResolvedValue(paymentRecord);
     prisma.webhookEvent.create.mockResolvedValue({});
     // Escrow off by default — the credit path checks the merchant's opt-in.
-    prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: false });
+    prisma.merchant.findUnique.mockResolvedValue({
+      settlementHoldEnabled: false,
+    });
     prisma.merchantBalance.upsert.mockResolvedValue({});
     prisma.merchantLedgerEntry.create.mockResolvedValue({});
     prisma.merchantLedgerEntry.findFirst.mockResolvedValue(null);
@@ -232,7 +234,7 @@ describe('PaymentsService', () => {
     );
   });
 
-  describe('escrow hold on completion', () => {
+  describe('settlement hold on completion', () => {
     const completeAPayment = async () => {
       stripeMock.webhooks.constructEvent.mockReturnValue({
         id: 'evt_success',
@@ -252,7 +254,9 @@ describe('PaymentsService', () => {
     };
 
     it('credits spendable balance when the merchant has not opted in', async () => {
-      prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: false });
+      prisma.merchant.findUnique.mockResolvedValue({
+        settlementHoldEnabled: false,
+      });
 
       await completeAPayment();
 
@@ -268,9 +272,11 @@ describe('PaymentsService', () => {
     });
 
     it('holds the credit as reserved when the merchant has opted in', async () => {
-      // The point of the whole feature: an escrowed payment must not become
-      // spendable at completion, or the dispute window protects nothing.
-      prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: true });
+      // The point of the whole feature: a held payment must not become
+      // spendable at completion, or the window protects nothing.
+      prisma.merchant.findUnique.mockResolvedValue({
+        settlementHoldEnabled: true,
+      });
 
       await completeAPayment();
 
@@ -280,15 +286,46 @@ describe('PaymentsService', () => {
       expect(call.create.availableAmount).toBe(0);
     });
 
-    it('labels the held ledger entry so the merchant can tell why', async () => {
-      prisma.merchant.findUnique.mockResolvedValue({ escrowEnabled: true });
+    it('does not claim escrow for a payer who cannot use it', async () => {
+      // A CCTP payer has no Stellar account to authorize a lock and no address
+      // the contract could refund to. Labelling their hold "escrow" would
+      // promise a guarantee the chain is not making.
+      prisma.merchant.findUnique.mockResolvedValue({
+        settlementHoldEnabled: true,
+      });
+      // The Stripe path credits the row it looked up, not the updated one.
+      prisma.payment.findUnique.mockResolvedValue({
+        ...paymentRecord,
+        sourceChain: 'base',
+      });
 
       await completeAPayment();
 
       expect(prisma.merchantLedgerEntry.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            description: 'Payment completion credit (held in escrow)',
+            description:
+              'Payment completion credit (held for settlement window)',
+          }),
+        }),
+      );
+    });
+
+    it('calls it escrow only when the payer is Stellar-native', async () => {
+      prisma.merchant.findUnique.mockResolvedValue({
+        settlementHoldEnabled: true,
+      });
+      prisma.payment.findUnique.mockResolvedValue({
+        ...paymentRecord,
+        sourceChain: 'stellar',
+      });
+
+      await completeAPayment();
+
+      expect(prisma.merchantLedgerEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            description: 'Payment completion credit (held on-chain in escrow)',
           }),
         }),
       );
