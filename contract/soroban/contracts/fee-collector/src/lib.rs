@@ -1,20 +1,11 @@
 #![no_std]
-use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
-    Address, Env,
-};
+use soroban_sdk::{contract, contractevent, contractimpl, contracttype, token, Address, Env};
 
 #[contracttype]
 pub enum DataKey {
     Admin,
     FeeBps,
     Treasury,
-}
-
-#[contracterror]
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum FeeCollectorError {
-    AlreadyInitialized = 1,
 }
 
 #[contractevent(data_format = "vec")]
@@ -46,11 +37,11 @@ pub struct FeeCollectorContract;
 
 #[contractimpl]
 impl FeeCollectorContract {
-    pub fn initialize(env: Env, admin: Address, fee_bps: u32, treasury: Address) {
-        if env.storage().instance().has(&DataKey::Admin) {
-            panic_with_error!(&env, FeeCollectorError::AlreadyInitialized);
-        }
+    /// Runs atomically as part of the deploy transaction, so there is no window
+    /// in which an attacker can claim admin of a freshly deployed instance.
+    pub fn __constructor(env: Env, admin: Address, fee_bps: u32, treasury: Address) {
         admin.require_auth();
+        assert!(fee_bps <= 200, "max fee is 2%");
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
@@ -97,8 +88,9 @@ impl FeeCollectorContract {
         FeeBpsUpdated { new_fee_bps }.publish(&env);
     }
 
+    /// Always set: the constructor cannot be skipped.
     pub fn get_fee_bps(env: Env) -> u32 {
-        env.storage().instance().get(&DataKey::FeeBps).unwrap_or(50)
+        env.storage().instance().get(&DataKey::FeeBps).unwrap()
     }
 }
 

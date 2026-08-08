@@ -43,6 +43,31 @@ CONTRACTS=(
   "fee_collector:SOROBAN_FEE_COLLECTOR_CONTRACT_ID"
 )
 
+# Constructor arguments per contract, echoed one per line. Every contract is
+# configured by its `__constructor`, which runs inside the deploy transaction —
+# there is no post-deploy `initialize` to call, and no window for someone else
+# to call it first (#172). A contract with no constructor args echoes nothing.
+constructor_args() {
+  case "$1" in
+    escrow)
+      printf '%s\n' --admin "$ESCROW_ADMIN"
+      ;;
+    fee_collector)
+      printf '%s\n' --admin "$FEE_COLLECTOR_ADMIN" \
+        --fee_bps "$FEE_BPS" \
+        --treasury "$FEE_COLLECTOR_TREASURY"
+      ;;
+  esac
+}
+
+# Names the env vars a contract's constructor needs, for the pre-flight check.
+required_admin_vars() {
+  case "$1" in
+    escrow) printf '%s\n' ESCROW_ADMIN ;;
+    fee_collector) printf '%s\n' FEE_COLLECTOR_ADMIN FEE_COLLECTOR_TREASURY ;;
+  esac
+}
+
 TESTNET_PASSPHRASE="Test SDF Network ; September 2015"
 MAINNET_PASSPHRASE="Public Global Stellar Network ; September 2015"
 DEFAULT_TESTNET_RPC="https://soroban-testnet.stellar.org"

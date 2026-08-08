@@ -30,20 +30,18 @@ pub enum DataKey {
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum EscrowError {
-    AlreadyInitialized = 1,
-    NotInitialized = 2,
-    ContractPaused = 3,
-    EscrowNotFound = 4,
-    EscrowAlreadyExists = 5,
-    InvalidAmount = 6,
-    InvalidPaymentId = 7,
-    InvalidParties = 8,
-    InvalidReleaseAt = 9,
-    NotLocked = 10,
-    NotResolvable = 11,
-    DisputeWindowClosed = 12,
-    ReleaseWindowOpen = 13,
-    InvalidSplit = 14,
+    ContractPaused = 1,
+    EscrowNotFound = 2,
+    EscrowAlreadyExists = 3,
+    InvalidAmount = 4,
+    InvalidPaymentId = 5,
+    InvalidParties = 6,
+    InvalidReleaseAt = 7,
+    NotLocked = 8,
+    NotResolvable = 9,
+    DisputeWindowClosed = 10,
+    ReleaseWindowOpen = 11,
+    InvalidSplit = 12,
 }
 
 #[contracttype]
@@ -144,13 +142,11 @@ pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    /// Register the admin that can pause the contract. Required before any
-    /// escrow can be locked, so an incident always has someone able to halt
-    /// new locks.
-    pub fn initialize(env: Env, admin: Address) {
-        if env.storage().instance().has(&DataKey::Admin) {
-            panic_with_error!(&env, EscrowError::AlreadyInitialized);
-        }
+    /// Registers the admin that can pause the contract. Runs atomically as part
+    /// of the deploy transaction, so there is no window in which an attacker can
+    /// claim admin of a freshly deployed instance — and every escrow this
+    /// contract ever holds is guaranteed to have someone able to halt new locks.
+    pub fn __constructor(env: Env, admin: Address) {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
 
@@ -181,8 +177,9 @@ impl EscrowContract {
             .unwrap_or(false)
     }
 
-    pub fn get_admin(env: Env) -> Option<Address> {
-        env.storage().instance().get(&DataKey::Admin)
+    /// Always set: the constructor cannot be skipped.
+    pub fn get_admin(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Admin).unwrap()
     }
 
     /// Pull `amount` from the payer into the contract and hold it until the
@@ -201,9 +198,6 @@ impl EscrowContract {
     ) -> BytesN<32> {
         payer.require_auth();
 
-        if !env.storage().instance().has(&DataKey::Admin) {
-            panic_with_error!(&env, EscrowError::NotInitialized);
-        }
         if Self::is_paused(env.clone()) {
             panic_with_error!(&env, EscrowError::ContractPaused);
         }
@@ -393,11 +387,9 @@ impl EscrowContract {
     }
 }
 
+/// The constructor cannot be skipped, so the admin is always present.
 fn require_admin(env: &Env) -> Address {
-    let admin: Address = match env.storage().instance().get(&DataKey::Admin) {
-        Some(admin) => admin,
-        None => panic_with_error!(env, EscrowError::NotInitialized),
-    };
+    let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
     admin.require_auth();
     admin
 }
