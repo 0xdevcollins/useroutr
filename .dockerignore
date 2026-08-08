@@ -1,0 +1,27 @@
+# Keep the build context small: node_modules is reinstalled inside the image
+# from package-lock.json, and build output is regenerated.
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+out
+**/out
+coverage
+**/coverage
+
+# Never bake secrets or local state into an image layer.
+.env
+.env.*
+!.env.example
+
+# Rust contracts are built with cargo, not Docker.
+contract/soroban/target
+
+.git
+.github
+.claude
+docs
+*.log
+.DS_Store
