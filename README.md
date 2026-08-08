@@ -80,7 +80,7 @@ Important local DB note:
 - so set `DATABASE_URL` to:
 
 ```env
-DATABASE_URL="postgresql://useroutr:password@localhost:5434/useroutr"
+DATABASE_URL="postgresql://tavvio:password@localhost:5434/tavvio"
 ```
 
 Set at least these for local API startup:
@@ -115,6 +115,48 @@ npm run start:dev
 
 API runs on `http://localhost:3000` by default.
 
+### Everything at once, in Docker
+
+Steps 4–6 above start only Postgres and Redis and leave you to run each app by
+hand. To bring up the whole stack instead:
+
+```bash
+cp .env.example .env && docker compose up
+```
+
+| Service | URL | Notes |
+| --- | --- | --- |
+| `api` | http://localhost:3000 | `/healthz` liveness, `/readyz` readiness; everything else under `/v1` |
+| `dashboard` | http://localhost:3001 | |
+| `www` | http://localhost:3002 | |
+| `checkout` | http://localhost:3003 | |
+| `postgres` | localhost:5434 | `tavvio/password`, volume `pgdata` |
+| `redis` | localhost:6379 | volume `redisdata` |
+
+The repo is bind-mounted into each app container, so edits on the host
+hot-reload inside it. `node_modules` and `.next` are masked with anonymous
+volumes — the host's `node_modules` is built for the host's platform and would
+shadow the image's Linux binaries (Prisma engines, SWC).
+
+`api` waits for Postgres and Redis to pass their healthchecks before starting;
+the frontends wait for `api`. Migrations are not run automatically:
+
+```bash
+docker compose exec api npx --workspace=api prisma migrate dev
+```
+
+Useful:
+
+```bash
+docker compose up api            # just the API and its dependencies
+docker compose logs -f api       # follow one service
+docker compose build --no-cache  # after changing a Dockerfile or lockfile
+docker compose down -v           # stop and wipe the database volume
+```
+
+Each app's `Dockerfile` also carries a `production` target (compose uses `dev`),
+which builds the app and runs it without the source mount.
+
 ## Pre-Beta Environment Setup Guide
 
 Before deploying to beta or production, ensure all required environment variables are properly configured. This section details all secrets, credentials, and their sources.
@@ -133,7 +175,7 @@ These variables are required for the API to start:
 
 | Variable | Description | Source | Example |
 |----------|-------------|--------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | Create a database and get the connection URL | `postgresql://useroutr:password@localhost:5434/useroutr` |
+| `DATABASE_URL` | PostgreSQL connection string | Create a database and get the connection URL | `postgresql://tavvio:password@localhost:5434/tavvio` |
 | `REDIS_URL` | Redis connection string | Redis instance (local or cloud) | `redis://localhost:6379` |
 | `NODE_ENV` | Application environment | Set to `development`, `staging`, or `production` | `development` |
 | `PORT` | API listen port | Choose any available port | `3000` |
@@ -299,7 +341,7 @@ node -e "const ethers = require('ethers'); const wallet = ethers.Wallet.createRa
 Minimum required for `npm run start:dev`:
 
 ```env
-DATABASE_URL=postgresql://useroutr:password@localhost:5434/useroutr
+DATABASE_URL=postgresql://tavvio:password@localhost:5434/tavvio
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=<run: ./scripts/generate-secrets.sh>
 NODE_ENV=development

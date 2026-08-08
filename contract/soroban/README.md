@@ -1,22 +1,137 @@
-# Soroban Project
+# Useroutr — Soroban Contracts
 
-## Project Structure
+Rust/Soroban contracts for the Stellar settlement leg. See
+[`docs/06-smart-contract-spec.md`](../../docs/06-smart-contract-spec.md) for the
+design and invariants each contract is held to.
 
-This repository uses the recommended structure for a Soroban project:
+| Contract | Crate | Purpose | Env var |
+| --- | --- | --- | --- |
+| `escrow` | `contracts/escrow` | Holds a settled payment through a dispute window; arbiter can release, refund, or split | `SOROBAN_ESCROW_CONTRACT_ID` |
+| `fee_collector` | `contracts/fee-collector` | Splits the protocol fee out of a gross amount at settlement | `SOROBAN_FEE_COLLECTOR_CONTRACT_ID` |
+| `settlement` | `contracts/settlement` | Payment-intent settlement. Scaffold today (`initialize`/`get_admin`); see spec §2 for the target surface | `SOROBAN_SETTLEMENT_CONTRACT_ID` |
+
+## Layout
 
 ```text
-.
-├── contracts
-│   └── hello_world
-│       ├── src
-│       │   ├── lib.rs
-│       │   └── test.rs
-│       └── Cargo.toml
-├── Cargo.toml
-└── README.md
+contract/soroban
+├── contracts/
+│   ├── escrow/            # lib.rs, test.rs, test_snapshots/
+│   ├── fee-collector/
+│   └── settlement/
+├── scripts/
+│   ├── deploy.sh          # build + deploy + initialize
+│   ├── verify.sh          # confirm deployments are live and configured
+│   └── lib.sh             # shared helpers + the contract manifest
+├── deployments/           # <network>.json — deployed contract ids (committed)
+├── Cargo.toml             # workspace
+└── Cargo.lock             # committed; CI builds with --locked
 ```
 
-- New Soroban contracts can be put in `contracts`, each in their own directory. There is already a `hello_world` contract in there to get you started.
-- If you initialized this project with any other example contracts via `--with-example`, those contracts will be in the `contracts` directory as well.
-- Contracts should have their own `Cargo.toml` files that rely on the top-level `Cargo.toml` workspace for their dependencies.
-- Frontend libraries can be added to the top-level directory as well. If you initialized this project with a frontend template via `--frontend-template` you will have those files already included.
+## Develop
+
+```bash
+cargo test --workspace --locked
+```
+
+`cargo fmt --all` before pushing. CI pins rustc to **1.93.0** — a newer stable
+rejects `ethnum 1.5.2` (transitive via `soroban-sdk`), so match that toolchain
+locally if you hit `E0512`.
+
+Build the wasm:
+
+```bash
+stellar contract build
+```
+
+## Deploy
+
+Prerequisites: the [Stellar CLI](https://developers.stellar.org/docs/tools/cli)
+and a funded account. For testnet, create and fund one with:
+
+```bash
+stellar keys generate deployer --network testnet --fund
+```
+
+That uses [Friendbot](https://friendbot.stellar.org); you can also fund an
+existing `G…` address directly at <https://friendbot.stellar.org?addr=G…>.
+
+### Environment
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `SOROBAN_DEPLOY_SECRET` | yes | `S…` secret of the deploying account. Falls back to `STELLAR_SECRET_KEY`, then `STELLAR_RELAY_KEYPAIR_SECRET`. |
+| `STELLAR_SOROBAN_RPC_URL` | mainnet only | RPC endpoint. Testnet defaults to `https://soroban-testnet.stellar.org`; there is no free public mainnet RPC, so name a provider. |
+| `FEE_COLLECTOR_ADMIN` | to initialize | `G…` admin. Falls back to `STELLAR_RELAY_PUBLIC_KEY`. **Must be the deploying account** — `initialize` calls `admin.require_auth()`. |
+| `FEE_COLLECTOR_TREASURY` | to initialize | `G…` address that receives protocol fees. |
+| `FEE_BPS` | no | Protocol fee in bps. Default `50`, hard-capped at `200` by the contract. |
+| `SETTLEMENT_ADMIN` | to initialize | `G…` admin for the settlement contract. Defaults to `FEE_COLLECTOR_ADMIN`. |
+| `ENV_FILE` | no | Where contract ids are written. Defaults to the repo-root `.env`. |
+
+### Run it
+
+```bash
+cd contract/soroban && ./scripts/deploy.sh testnet
+```
+
+That one command runs the test suite, builds the wasm, deploys every contract in
+the manifest, writes each id into `.env`, records them in
+`deployments/testnet.json`, and initializes `fee_collector`.
+
+Options:
+
+| Flag | Effect |
+| --- | --- |
+| `--yes` | Skip the mainnet confirmation prompt (CI uses this) |
+| `--skip-build` | Reuse the wasm already in `target/` |
+| `--skip-tests` | Do not run `cargo test` first |
+| `--redeploy` | Deploy fresh instances even if ids are already recorded |
+| `--reinitialize` | Re-run initialization against an existing deployment |
+
+Re-running is safe by default: contracts with a recorded id are left alone, and
+`fee_collector` and `settlement` are only initialized on the run that actually
+deploys them. Both reject a second `initialize` with `AlreadyInitialized`, so
+`--reinitialize` against a configured instance surfaces that error rather than
+silently overwriting.
+
+Mainnet asks you to type `mainnet` to confirm before spending anything:
+
+```bash
+STELLAR_SOROBAN_RPC_URL="https://your-provider.example" ./scripts/deploy.sh mainnet
+```
+
+### Verify
+
+```bash
+./scripts/verify.sh testnet
+```
+
+For each contract this checks that the id is set in `.env`, matches
+`deployments/<network>.json`, resolves to a live (non-archived) contract, and
+that the deployed wasm exposes the entry points we expect. For `fee_collector`
+it also reads back `get_fee_bps` and checks it against the 200 bps cap. Exits
+non-zero on any failure, so it can gate a pipeline.
+
+### Adding a contract
+
+Add the crate under `contracts/`, then add one line to `CONTRACTS` in
+[`scripts/lib.sh`](scripts/lib.sh):
+
+```bash
+CONTRACTS=(
+  "escrow:SOROBAN_ESCROW_CONTRACT_ID"
+  "fee_collector:SOROBAN_FEE_COLLECTOR_CONTRACT_ID"
+  "settlement:SOROBAN_SETTLEMENT_CONTRACT_ID"
+  "your_contract:SOROBAN_YOUR_CONTRACT_ID"      # <wasm stem>:<env var>
+)
+```
+
+The wasm stem is the crate name with `-` replaced by `_`. Both scripts pick it
+up from there; add its expected entry points to `expected_fns()` in
+[`scripts/verify.sh`](scripts/verify.sh) and any post-deploy initialization to
+the initialize section of [`scripts/deploy.sh`](scripts/deploy.sh).
+
+### CI
+
+`.github/workflows/contracts.yml` (`workflow_dispatch` → "Deploy Contracts")
+runs the same scripts, so CI and local deploys cannot drift. It needs the
+`STELLAR_SECRET_KEY` secret and, for mainnet, `STELLAR_SOROBAN_RPC_URL`.

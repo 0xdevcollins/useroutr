@@ -1,17 +1,141 @@
-version: "3.8"
+# One-command local development: `docker compose up`.
+#
+# Every app runs its dev server with the repo bind-mounted, so edits on the host
+# hot-reload inside the container. `node_modules` is deliberately masked with an
+# anonymous volume at each mount point — the host's tree is built for the host's
+# platform and would shadow the image's Linux binaries (Prisma engines, SWC).
+#
+# Ports match the dev scripts: api 3000, dashboard 3001, www 3002, checkout 3003.
+
+x-app-common: &app-common
+  restart: unless-stopped
+  networks: [tavvio]
+
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: useroutr
-      POSTGRES_USER: useroutr
+      POSTGRES_DB: tavvio
+      POSTGRES_USER: tavvio
       POSTGRES_PASSWORD: password
     ports: ["5434:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tavvio -d tavvio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [tavvio]
 
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [tavvio]
+
+  api:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    ports: ["3000:3000"]
+    # Optional so a fresh clone comes up without one; copy .env.example first
+    # for anything that talks to Stellar or Circle.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the compose network the services resolve by name and use the
+      # container-side ports, not the host-mapped ones.
+      DATABASE_URL: postgresql://tavvio:password@postgres:5432/tavvio
+      REDIS_URL: redis://redis:6379
+      PORT: "3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    healthcheck:
+      # /healthz is mounted outside the /v1 prefix (see api main.ts).
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  dashboard:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+      target: dev
+    ports: ["3001:3001"]
+    env_file:
+      - path: apps/dashboard/.env.local
+        required: false
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/v1
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/v1
+    depends_on: [api]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/dashboard/node_modules
+      - /app/apps/dashboard/.next
+
+  www:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: apps/www/Dockerfile
+      target: dev
+    ports: ["3002:3002"]
+    env_file:
+      - path: apps/www/.env.local
+        required: false
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/v1
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/v1
+    depends_on: [api]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/www/node_modules
+      - /app/apps/www/.next
+
+  checkout:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: apps/checkout/Dockerfile
+      target: dev
+    ports: ["3003:3003"]
+    env_file:
+      - path: apps/checkout/.env.local
+        required: false
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/v1
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/v1
+    depends_on: [api]
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/checkout/node_modules
+      - /app/apps/checkout/.next
+
+networks:
+  tavvio:
 
 volumes:
   pgdata:
+  redisdata:

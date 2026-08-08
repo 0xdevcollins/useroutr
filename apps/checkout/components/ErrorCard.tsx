@@ -3,16 +3,31 @@
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import type { PaymentStatus } from "@useroutr/types";
 
-const ERROR_MESSAGES: Record<string, { title: string; message: string }> = {
+type ErrorInfo = { title: string; message: string };
+
+/// Keyed by payment status (what `ConfirmPageClient` passes) plus the
+/// client-side failure codes the wallet step can raise.
+const ERROR_MESSAGES: Partial<Record<PaymentStatus, ErrorInfo>> &
+  Record<string, ErrorInfo> = {
   EXPIRED: {
-    title: "Conversion rate expired",
+    title: "Quote expired",
     message:
-      "The exchange rate expired. Please start the payment again to get a fresh quote.",
+      "The locked exchange rate expired before the payment settled. Please start the payment again to get a fresh quote.",
   },
-  HTLC_TIMEOUT: {
-    title: "Payment timed out",
+  REFUNDING: {
+    title: "Refund in progress",
     message:
-      "Your payment timed out. Your funds will be automatically refunded within 24 hours.",
+      "This payment couldn't be settled, so your funds are being returned to the wallet you paid from.",
+  },
+  REFUNDED: {
+    title: "Payment refunded",
+    message:
+      "This payment was refunded to the wallet you paid from. Nothing was charged.",
+  },
+  ATTESTATION_TIMEOUT: {
+    title: "Transfer is taking longer than usual",
+    message:
+      "Circle hasn't attested your transfer yet, so we can't release the funds on Stellar. This usually clears on its own — contact support if it doesn't.",
   },
   INSUFFICIENT_LIQUIDITY: {
     title: "Conversion not available",
