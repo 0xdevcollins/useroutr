@@ -44,7 +44,6 @@ export class StellarService {
   private readonly networkPassphrase: string;
 
   private readonly feeCollectorContractId: string;
-  private readonly settlementContractId: string;
 
   constructor() {
     const network =
@@ -72,8 +71,6 @@ export class StellarService {
 
     this.feeCollectorContractId =
       process.env.SOROBAN_FEE_COLLECTOR_CONTRACT_ID || '';
-    this.settlementContractId =
-      process.env.SOROBAN_SETTLEMENT_CONTRACT_ID || '';
   }
 
   // ── Account management ─────────────────────────────────────────────────────

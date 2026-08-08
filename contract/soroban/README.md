@@ -8,7 +8,6 @@ design and invariants each contract is held to.
 | --- | --- | --- | --- |
 | `escrow` | `contracts/escrow` | Holds a settled payment through a dispute window; arbiter can release, refund, or split | `SOROBAN_ESCROW_CONTRACT_ID` |
 | `fee_collector` | `contracts/fee-collector` | Splits the protocol fee out of a gross amount at settlement | `SOROBAN_FEE_COLLECTOR_CONTRACT_ID` |
-| `settlement` | `contracts/settlement` | Payment-intent settlement. Scaffold today (`initialize`/`get_admin`); see spec §2 for the target surface | `SOROBAN_SETTLEMENT_CONTRACT_ID` |
 
 ## Layout
 
@@ -16,8 +15,7 @@ design and invariants each contract is held to.
 contract/soroban
 ├── contracts/
 │   ├── escrow/            # lib.rs, test.rs, test_snapshots/
-│   ├── fee-collector/
-│   └── settlement/
+│   └── fee-collector/
 ├── scripts/
 │   ├── deploy.sh          # build + deploy + initialize
 │   ├── verify.sh          # confirm deployments are live and configured
@@ -64,7 +62,6 @@ existing `G…` address directly at <https://friendbot.stellar.org?addr=G…>.
 | `FEE_COLLECTOR_ADMIN` | to initialize | `G…` admin. Falls back to `STELLAR_RELAY_PUBLIC_KEY`. **Must be the deploying account** — `initialize` calls `admin.require_auth()`. |
 | `FEE_COLLECTOR_TREASURY` | to initialize | `G…` address that receives protocol fees. |
 | `FEE_BPS` | no | Protocol fee in bps. Default `50`, hard-capped at `200` by the contract. |
-| `SETTLEMENT_ADMIN` | to initialize | `G…` admin for the settlement contract. Defaults to `FEE_COLLECTOR_ADMIN`. |
 | `ENV_FILE` | no | Where contract ids are written. Defaults to the repo-root `.env`. |
 
 ### Run it
@@ -88,7 +85,7 @@ Options:
 | `--reinitialize` | Re-run initialization against an existing deployment |
 
 Re-running is safe by default: contracts with a recorded id are left alone, and
-`fee_collector` and `settlement` are only initialized on the run that actually
+`escrow` and `fee_collector` are only initialized on the run that actually
 deploys them. Both reject a second `initialize` with `AlreadyInitialized`, so
 `--reinitialize` against a configured instance surfaces that error rather than
 silently overwriting.
@@ -120,7 +117,6 @@ Add the crate under `contracts/`, then add one line to `CONTRACTS` in
 CONTRACTS=(
   "escrow:SOROBAN_ESCROW_CONTRACT_ID"
   "fee_collector:SOROBAN_FEE_COLLECTOR_CONTRACT_ID"
-  "settlement:SOROBAN_SETTLEMENT_CONTRACT_ID"
   "your_contract:SOROBAN_YOUR_CONTRACT_ID"      # <wasm stem>:<env var>
 )
 ```
