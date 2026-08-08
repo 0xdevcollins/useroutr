@@ -33,10 +33,14 @@ find_wasm() {
 # One line per deployable contract: "<wasm-stem>:<env-var>". The wasm stem is
 # the crate name with `-` replaced by `_`, which is what cargo emits. Add new
 # contracts here and both deploy.sh and verify.sh pick them up.
+# `settlement` is deliberately absent. The contract it names was removed in
+# 27fc6dd as legacy: it modelled the pre-CCTP HTLC settle/confirm flow, nothing
+# reads its id, and the crate here is an unrelated stub. Deploying that stub
+# over the orphaned testnet instance would replace a working contract with one
+# that cannot settle anything.
 CONTRACTS=(
   "escrow:SOROBAN_ESCROW_CONTRACT_ID"
   "fee_collector:SOROBAN_FEE_COLLECTOR_CONTRACT_ID"
-  "settlement:SOROBAN_SETTLEMENT_CONTRACT_ID"
 )
 
 TESTNET_PASSPHRASE="Test SDF Network ; September 2015"

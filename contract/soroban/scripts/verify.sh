@@ -37,7 +37,6 @@ expected_fns() {
   case "$1" in
     escrow) printf '%s\n' initialize pause unpause is_paused lock release dispute resolve auto_release get_escrow ;;
     fee_collector) printf '%s\n' initialize deduct set_fee_bps get_fee_bps ;;
-    settlement) printf '%s\n' initialize get_admin ;;
   esac
 }
 
@@ -114,7 +113,7 @@ for entry in "${CONTRACTS[@]}"; do
         ok "fee_bps = $fee_bps"
       fi
       ;;
-    escrow | settlement)
+    escrow)
       # get_admin returns Option<Address>: `null` means initialize never ran.
       admin="$(stellar contract invoke \
         --id "$env_id" \

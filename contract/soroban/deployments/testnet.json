@@ -1,0 +1,8 @@
+{
+  "network": "testnet",
+  "deployedAt": "2026-08-08T11:38:58Z",
+  "contracts": {
+    "escrow": "CCCEY77DIAWMLP62YFMDWPN2KK4CSBF5POSFHI5Y4KP2ZW2VSIJUXGYM",
+    "fee_collector": "CD375CK6TVIHXY3WKMTWZ35EHHZGGPP6DVXDLCD2SNWOIWWOEJ4BMJDE"
+  }
+}

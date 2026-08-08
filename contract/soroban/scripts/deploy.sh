@@ -26,8 +26,6 @@
 #                           admin must be the deploying account.
 #   FEE_COLLECTOR_TREASURY  G… treasury address
 #   FEE_BPS                 protocol fee in bps (default 50, max 200)
-# settlement initialization:
-#   SETTLEMENT_ADMIN        G… admin (defaults to FEE_COLLECTOR_ADMIN)
 # escrow initialization:
 #   ESCROW_ADMIN            G… admin able to pause new locks
 #                           (defaults to FEE_COLLECTOR_ADMIN)
@@ -228,25 +226,6 @@ if should_initialize escrow "$escrow_id"; then
       --admin "$escrow_admin" >/dev/null ||
       fail "escrow initialize failed — the deploying account must be able to sign as admin ($escrow_admin)"
     ok "escrow initialized"
-  fi
-fi
-
-settlement_id="$(lookup_contract_id SOROBAN_SETTLEMENT_CONTRACT_ID settlement)"
-settlement_admin="${SETTLEMENT_ADMIN:-$admin}"
-if should_initialize settlement "$settlement_id"; then
-  if [ -z "$settlement_admin" ]; then
-    warn "set SETTLEMENT_ADMIN (or FEE_COLLECTOR_ADMIN) to initialize settlement"
-    warn "deploy is complete, but settlement is unconfigured"
-  else
-    step "initializing settlement…"
-    stellar contract invoke \
-      --id "$settlement_id" \
-      "${NETWORK_ARGS[@]}" \
-      --quiet \
-      -- initialize \
-      --admin "$settlement_admin" >/dev/null ||
-      fail "settlement initialize failed — the deploying account must be able to sign as admin ($settlement_admin)"
-    ok "settlement initialized"
   fi
 fi
 
