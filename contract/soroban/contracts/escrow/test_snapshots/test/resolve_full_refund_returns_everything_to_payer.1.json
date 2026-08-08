@@ -371,6 +371,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "disputed_at"
+                      },
+                      "val": {
+                        "u64": "1000"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "merchant"
                       },
                       "val": {

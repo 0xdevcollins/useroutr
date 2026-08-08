@@ -35,7 +35,7 @@ export STELLAR_ACCOUNT="$SOURCE_ACCOUNT"
 # wasm sitting at the recorded id.
 expected_fns() {
   case "$1" in
-    escrow) printf '%s\n' pause unpause is_paused lock release dispute resolve auto_release get_escrow get_admin ;;
+    escrow) printf '%s\n' pause unpause is_paused lock release dispute resolve auto_release expire_dispute get_escrow get_admin ;;
     fee_collector) printf '%s\n' deduct set_fee_bps get_fee_bps ;;
   esac
 }

@@ -277,6 +277,7 @@ fn lock_moves_funds_into_escrow_and_records_entry() {
     assert_eq!(entry.state, EscrowState::Locked);
     assert_eq!(entry.created_at, START_TS);
     assert_eq!(entry.release_at, START_TS + WINDOW);
+    assert_eq!(entry.disputed_at, 0);
 }
 
 #[test]
@@ -593,6 +594,133 @@ fn auto_release_blocked_while_disputed() {
     assert_err(
         s.client.try_auto_release(&escrow_id),
         EscrowError::NotLocked,
+    );
+}
+
+// ── expire_dispute (unresponsive arbiter) ───────────────────────────────────
+
+#[test]
+fn dispute_records_when_it_was_opened() {
+    let s = setup();
+    let escrow_id = s.lock();
+
+    s.client.dispute(&escrow_id);
+
+    assert_eq!(s.client.get_escrow(&escrow_id).disputed_at, START_TS);
+}
+
+#[test]
+fn expire_dispute_pays_merchant_after_the_arbitration_window() {
+    // The gap this closes: before, a Disputed escrow the arbiter never ruled on
+    // held its funds forever.
+    let s = setup();
+    let escrow_id = s.lock();
+    s.client.dispute(&escrow_id);
+
+    s.env
+        .ledger()
+        .set_timestamp(START_TS + ARBITRATION_WINDOW + 1);
+    s.client.expire_dispute(&escrow_id);
+
+    assert_eq!(s.token_client.balance(&s.merchant), AMOUNT);
+    assert_eq!(s.token_client.balance(&s.contract_id), 0);
+    assert_eq!(s.client.get_escrow(&escrow_id).state, EscrowState::Released);
+}
+
+#[test]
+fn expire_dispute_needs_no_auth() {
+    // Nobody should have to depend on the arbiter — or on us — to unstick it.
+    let s = setup();
+    let escrow_id = s.lock();
+    s.client.dispute(&escrow_id);
+
+    s.env
+        .ledger()
+        .set_timestamp(START_TS + ARBITRATION_WINDOW + 1);
+    s.env.set_auths(&[]);
+    s.client.expire_dispute(&escrow_id);
+
+    assert_eq!(s.token_client.balance(&s.merchant), AMOUNT);
+}
+
+#[test]
+fn expire_dispute_before_the_window_closes_fails() {
+    let s = setup();
+    let escrow_id = s.lock();
+    s.client.dispute(&escrow_id);
+
+    s.env
+        .ledger()
+        .set_timestamp(START_TS + ARBITRATION_WINDOW - 1);
+    assert_err(
+        s.client.try_expire_dispute(&escrow_id),
+        EscrowError::ArbitrationWindowOpen,
+    );
+    assert_eq!(s.token_client.balance(&s.contract_id), AMOUNT);
+}
+
+#[test]
+fn expire_dispute_rejects_an_undisputed_escrow() {
+    let s = setup();
+    let escrow_id = s.lock();
+
+    s.env
+        .ledger()
+        .set_timestamp(START_TS + ARBITRATION_WINDOW + 1);
+    assert_err(
+        s.client.try_expire_dispute(&escrow_id),
+        EscrowError::NotDisputed,
+    );
+}
+
+#[test]
+fn arbiter_can_still_rule_after_the_window_until_someone_closes_it() {
+    // The deadline is a floor for third parties, not a cutoff for the arbiter.
+    let s = setup();
+    let escrow_id = s.lock();
+    s.client.dispute(&escrow_id);
+
+    s.env
+        .ledger()
+        .set_timestamp(START_TS + ARBITRATION_WINDOW + 1);
+    s.client.resolve(&escrow_id, &10_000, &0);
+
+    assert_eq!(s.token_client.balance(&s.payer), AMOUNT);
+    assert_eq!(s.client.get_escrow(&escrow_id).state, EscrowState::Refunded);
+}
+
+#[test]
+fn expire_dispute_is_not_replayable() {
+    let s = setup();
+    let escrow_id = s.lock();
+    s.client.dispute(&escrow_id);
+
+    s.env
+        .ledger()
+        .set_timestamp(START_TS + ARBITRATION_WINDOW + 1);
+    s.client.expire_dispute(&escrow_id);
+    assert_err(
+        s.client.try_expire_dispute(&escrow_id),
+        EscrowError::NotDisputed,
+    );
+}
+
+#[test]
+fn ttl_stretches_to_cover_an_arbitration_that_outlasts_the_window() {
+    // A dispute raised late in a short window pushes the deadline past
+    // release_at. If the TTL still tracked release_at the entry would archive
+    // mid-arbitration and take the funds with it.
+    let s = setup();
+    let escrow_id = s.lock_with_window(AMOUNT, 3_600);
+
+    s.client.dispute(&escrow_id);
+
+    let arbitration_deadline = START_TS + ARBITRATION_WINDOW;
+    let needed = ((arbitration_deadline - START_TS) / SECONDS_PER_LEDGER) as u32;
+    assert!(
+        s.escrow_ttl(&escrow_id) >= needed,
+        "ttl {} does not reach the arbitration deadline ({needed} ledgers)",
+        s.escrow_ttl(&escrow_id)
     );
 }
 
