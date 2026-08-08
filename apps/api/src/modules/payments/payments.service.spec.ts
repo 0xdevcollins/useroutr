@@ -8,6 +8,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { LinksService } from '../links/links.service';
 import { CctpService } from '../cctp/cctp.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EscrowService } from '../escrow/escrow.service';
 
 interface MockPayment {
   id: string;
@@ -44,6 +45,8 @@ describe('PaymentsService', () => {
 
   const prisma = {
     payment: {
+      updateMany: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
       // createFromLink wires both — `create` lands the row, `delete` is the
@@ -105,6 +108,16 @@ describe('PaymentsService', () => {
     add: jest.fn(),
   };
 
+  const holdQueue = {
+    add: jest.fn(),
+    remove: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const escrowService = {
+    autoRelease: jest.fn(),
+    isConfigured: jest.fn().mockReturnValue(true),
+  };
+
   const configService = {
     get: jest.fn((key: string) => {
       if (key === 'STRIPE_WEBHOOK_SECRET') return 'whsec_test';
@@ -124,6 +137,10 @@ describe('PaymentsService', () => {
     prisma.payment.update.mockResolvedValue(paymentRecord);
     prisma.webhookEvent.create.mockResolvedValue({});
     // Escrow off by default — the credit path checks the merchant's opt-in.
+    escrowService.autoRelease.mockResolvedValue(undefined);
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+    prisma.payment.findMany.mockResolvedValue([]);
+    prisma.merchantBalance.update.mockResolvedValue({});
     prisma.merchant.findUnique.mockResolvedValue({
       settlementHoldEnabled: false,
     });
@@ -152,6 +169,8 @@ describe('PaymentsService', () => {
         // queue injection. We replicate it here without pulling the BullMQ
         // helper into the test — keeps the test surface tiny.
         { provide: `BullQueue_cctp.observe`, useValue: cctpQueue },
+        { provide: `BullQueue_settlement.hold`, useValue: holdQueue },
+        { provide: EscrowService, useValue: escrowService },
         { provide: ConfigService, useValue: configService },
         {
           provide: NotificationsService,
@@ -232,6 +251,83 @@ describe('PaymentsService', () => {
         data: expect.objectContaining({ eventType: 'payment.completed' }),
       }),
     );
+  });
+
+  describe('releasing a settlement hold', () => {
+    const heldPayment = {
+      ...paymentRecord,
+      escrowState: 'HELD',
+      escrowId: null,
+    };
+
+    it('does nothing for a payment that is not held', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...paymentRecord,
+        escrowState: null,
+      });
+
+      await service.releaseSettlementHold('pay_123');
+
+      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('moves the balance and marks the payment released', async () => {
+      prisma.payment.findUnique.mockResolvedValue(heldPayment);
+      prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.releaseSettlementHold('pay_123');
+
+      expect(prisma.payment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ escrowState: 'HELD' }),
+          data: { escrowState: 'RELEASED' },
+        }),
+      );
+      expect(prisma.merchantBalance.update).toHaveBeenCalled();
+    });
+
+    it('credits once when the same job runs twice', async () => {
+      // The HELD → RELEASED transition is the guard. A duplicated or retried
+      // job must not turn one payment into two credits.
+      prisma.payment.findUnique.mockResolvedValue(heldPayment);
+      prisma.payment.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+
+      await service.releaseSettlementHold('pay_123');
+      await service.releaseSettlementHold('pay_123');
+
+      expect(prisma.merchantBalance.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves the ledger held when the on-chain release fails', async () => {
+      // Crediting spendable balance the contract has not released would be
+      // inventing money out of a failed transaction.
+      prisma.payment.findUnique.mockResolvedValue({
+        ...heldPayment,
+        escrowId: 'deadbeef',
+      });
+      escrowService.autoRelease.mockRejectedValue(new Error('rpc down'));
+
+      await expect(service.releaseSettlementHold('pay_123')).rejects.toThrow(
+        'rpc down',
+      );
+
+      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+      expect(prisma.merchantBalance.update).not.toHaveBeenCalled();
+    });
+
+    it('re-enqueues holds that outlived their job', async () => {
+      prisma.payment.findMany.mockResolvedValue([
+        { id: 'pay_1', escrowReleaseAt: new Date(Date.now() + 1000) },
+        { id: 'pay_2', escrowReleaseAt: new Date(Date.now() - 1000) },
+      ]);
+
+      const count = await service.reconcileSettlementHolds();
+
+      expect(count).toBe(2);
+      expect(holdQueue.add).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('settlement hold on completion', () => {
