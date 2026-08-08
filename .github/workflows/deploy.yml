@@ -1,8 +1,48 @@
 name: Deploy
 
+# Manual, not on push to main. Three reasons, all verifiable:
+#
+#  1. This workflow has never once run to completion. `uses:
+#     ./.github/workflows/ci.yml` was invalid because ci.yml did not declare
+#     `workflow_call`, so GitHub rejected the file before scheduling any job.
+#     Every run since at least 2026-07-12 shows "failure" with zero jobs. That
+#     is now fixed in ci.yml — which means this file is about to start doing
+#     something for the first time.
+#  2. Neither RAILWAY_TOKEN nor VERCEL_TOKEN exists, at repo level or in the
+#     Production environment. On `push: main` every job would fail and paint
+#     main red on every merge.
+#  3. Vercel already deploys dashboard/checkout/www through its own GitHub
+#     integration (see the "Production – …" deployments on the repo). Running
+#     the Vercel jobs below on push would deploy each app twice, racing the
+#     integration.
+#
+# So it stays opt-in until someone decides otherwise. To go back to deploying
+# automatically, add the secrets, settle the Vercel duplication, then replace
+# the trigger with:
+#
+#   on:
+#     push:
+#       branches: [main]
+
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to deploy"
+        required: true
+        type: choice
+        default: api
+        options:
+          - api
+          - dashboard
+          - checkout
+          - www
+          - all-frontends
+      skip_ci:
+        description: "Skip the CI gate (use only to re-deploy an already-tested commit)"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -14,6 +54,7 @@ env:
 jobs:
   # ── Gate: CI must pass first ─────────────────────────────────────────────────
   ci:
+    if: ${{ !inputs.skip_ci }}
     uses: ./.github/workflows/ci.yml
 
   # ── Deploy API to Railway ────────────────────────────────────────────────────
@@ -21,9 +62,24 @@ jobs:
     name: Deploy API
     runs-on: ubuntu-latest
     needs: [ci]
+    # `always()` so skip_ci can bypass the gate; the second clause still fails
+    # the job if CI ran and did not pass.
+    if: ${{ always() && inputs.target == 'api' && (inputs.skip_ci || needs.ci.result == 'success') }}
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      # Fail loudly and early rather than handing the CLI an empty token and
+      # letting it produce a confusing error deep in the deploy.
+      - name: Check RAILWAY_TOKEN is configured
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::error::RAILWAY_TOKEN is not set. Add it as a secret on the" \
+              "'production' environment before deploying the API."
+            exit 1
+          fi
 
       - name: Install Railway CLI
         run: npm i -g @railway/cli
@@ -33,74 +89,46 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway up --service api --detach
 
-  # ── Deploy Dashboard ─────────────────────────────────────────────────────────
-  deploy-dashboard:
-    name: Deploy Dashboard
+  # ── Deploy frontends to Vercel ───────────────────────────────────────────────
+  # Vercel's GitHub integration already deploys these on merge. These jobs exist
+  # for a manual re-deploy or to deploy from a branch the integration does not
+  # cover — running them alongside an integration deploy of the same commit will
+  # race it.
+  deploy-frontend:
+    name: Deploy ${{ matrix.app }}
     runs-on: ubuntu-latest
     needs: [ci]
+    if: ${{ always() && inputs.target != 'api' && (inputs.skip_ci || needs.ci.result == 'success') }}
     environment: production
+    strategy:
+      # One app's failure should not cancel the others mid-deploy.
+      fail-fast: false
+      matrix:
+        app: ${{ inputs.target == 'all-frontends' && fromJSON('["dashboard","checkout","www"]') || fromJSON(format('["{0}"]', inputs.target)) }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check VERCEL_TOKEN is configured
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not set. Add it as a secret on the" \
+              "'production' environment, or rely on Vercel's GitHub integration."
+            exit 1
+          fi
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/dashboard
+        working-directory: apps/${{ matrix.app }}
 
       - name: Build
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/dashboard
+        working-directory: apps/${{ matrix.app }}
 
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/dashboard
-
-  # ── Deploy Checkout ──────────────────────────────────────────────────────────
-  deploy-checkout:
-    name: Deploy Checkout
-    runs-on: ubuntu-latest
-    needs: [ci]
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vercel CLI
-        run: npm i -g vercel@latest
-
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/checkout
-
-      - name: Build
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/checkout
-
-      - name: Deploy
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/checkout
-
-  # ── Deploy WWW (Marketing) ──────────────────────────────────────────────────
-  deploy-www:
-    name: Deploy WWW
-    runs-on: ubuntu-latest
-    needs: [ci]
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vercel CLI
-        run: npm i -g vercel@latest
-
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/www
-
-      - name: Build
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/www
-
-      - name: Deploy
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: apps/www
+        working-directory: apps/${{ matrix.app }}
