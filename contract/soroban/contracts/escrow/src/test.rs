@@ -22,27 +22,20 @@ struct Setup {
     payment_id: Bytes,
 }
 
-/// Registers the contract and runs `initialize`. Tests that need the
-/// un-initialized state use `setup_uninitialized`.
+/// Deploys via the constructor, which is the only way to stand the contract
+/// up — there is no post-deploy `initialize` to race (#172).
 fn setup() -> Setup {
-    let s = setup_uninitialized();
-    s.client.initialize(&s.admin);
-    s
-}
-
-fn setup_uninitialized() -> Setup {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set_timestamp(START_TS);
-
-    let contract_id = env.register(EscrowContract, ());
-    let client = EscrowContractClient::new(&env, &contract_id);
 
     let token_admin = Address::generate(&env);
     let stellar_asset = env.register_stellar_asset_contract_v2(token_admin);
     let token = stellar_asset.address();
 
     let admin = Address::generate(&env);
+    let contract_id = env.register(EscrowContract, (&admin,));
+    let client = EscrowContractClient::new(&env, &contract_id);
     let payer = Address::generate(&env);
     let merchant = Address::generate(&env);
     let arbiter = Address::generate(&env);
@@ -136,41 +129,43 @@ fn assert_err<T: core::fmt::Debug, C: core::fmt::Debug>(
     }
 }
 
-// ── initialization & pause ───────────────────────────────────────────────────
+// ── constructor & pause ──────────────────────────────────────────────────────
 
 #[test]
-fn initialize_sets_admin() {
-    let s = setup_uninitialized();
-    assert_eq!(s.client.get_admin(), None);
+fn constructor_sets_admin() {
+    let s = setup();
 
-    s.client.initialize(&s.admin);
-
-    assert_eq!(s.client.get_admin(), Some(s.admin.clone()));
+    assert_eq!(s.client.get_admin(), s.admin);
     assert!(!s.client.is_paused());
 }
 
 #[test]
-fn double_initialize_fails() {
+fn admin_is_set_at_deploy_with_no_front_running_window() {
+    // #172: `initialize` used to be a separate call anyone could win, and the
+    // re-init guard made a stolen admin permanent. The constructor runs inside
+    // the deploy, so only the deployer's admin can ever be recorded — and there
+    // is no entry point left that could claim it.
     let s = setup();
-    assert_err(
-        s.client.try_initialize(&s.admin),
-        EscrowError::AlreadyInitialized,
-    );
+    let attacker = Address::generate(&s.env);
+
+    assert_eq!(s.client.get_admin(), s.admin);
+    assert_ne!(s.client.get_admin(), attacker);
+
+    // The pause switch answers to that admin and nobody else.
+    s.env.set_auths(&[]);
+    assert!(s.client.try_pause().is_err());
+    assert!(!s.client.is_paused());
 }
 
 #[test]
-fn lock_before_initialize_fails() {
-    let s = setup_uninitialized();
-    let result = s.client.try_lock(
-        &s.payer,
-        &s.merchant,
-        &s.arbiter,
-        &s.token,
-        &AMOUNT,
-        &s.payment_id,
-        &(START_TS + WINDOW),
-    );
-    assert_err(result, EscrowError::NotInitialized);
+fn locking_works_immediately_after_deploy() {
+    // There is no un-initialized state to fall into: a contract is usable the
+    // moment it exists.
+    let s = setup();
+
+    let escrow_id = s.lock();
+
+    assert_eq!(s.client.get_escrow(&escrow_id).state, EscrowState::Locked);
 }
 
 #[test]
@@ -260,12 +255,6 @@ fn pause_requires_admin_auth() {
 
     assert!(s.client.try_pause().is_err());
     assert!(!s.client.is_paused());
-}
-
-#[test]
-fn pause_before_initialize_fails() {
-    let s = setup_uninitialized();
-    assert_err(s.client.try_pause(), EscrowError::NotInitialized);
 }
 
 // ── lock ─────────────────────────────────────────────────────────────────────

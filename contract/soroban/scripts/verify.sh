@@ -35,8 +35,8 @@ export STELLAR_ACCOUNT="$SOURCE_ACCOUNT"
 # wasm sitting at the recorded id.
 expected_fns() {
   case "$1" in
-    escrow) printf '%s\n' initialize pause unpause is_paused lock release dispute resolve auto_release get_escrow ;;
-    fee_collector) printf '%s\n' initialize deduct set_fee_bps get_fee_bps ;;
+    escrow) printf '%s\n' pause unpause is_paused lock release dispute resolve auto_release get_escrow get_admin ;;
+    fee_collector) printf '%s\n' deduct set_fee_bps get_fee_bps ;;
   esac
 }
 
@@ -114,14 +114,15 @@ for entry in "${CONTRACTS[@]}"; do
       fi
       ;;
     escrow)
-      # get_admin returns Option<Address>: `null` means initialize never ran.
+      # The constructor guarantees an admin, so a missing one means the
+      # deployed wasm is not what we think it is.
       admin="$(stellar contract invoke \
         --id "$env_id" \
         "${NETWORK_ARGS[@]}" \
         --send=no --quiet \
         -- get_admin 2>/dev/null || true)"
       if [ -z "$admin" ] || [ "$admin" = "null" ]; then
-        note_failure "not initialized — get_admin returned no admin"
+        note_failure "get_admin returned no admin"
       else
         ok "admin = $(tr -d '"' <<<"$admin")"
       fi

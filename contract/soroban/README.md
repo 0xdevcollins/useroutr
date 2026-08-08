@@ -59,8 +59,9 @@ existing `G…` address directly at <https://friendbot.stellar.org?addr=G…>.
 | --- | --- | --- |
 | `SOROBAN_DEPLOY_SECRET` | yes | `S…` secret of the deploying account. Falls back to `STELLAR_SECRET_KEY`, then `STELLAR_RELAY_KEYPAIR_SECRET`. |
 | `STELLAR_SOROBAN_RPC_URL` | mainnet only | RPC endpoint. Testnet defaults to `https://soroban-testnet.stellar.org`; there is no free public mainnet RPC, so name a provider. |
-| `FEE_COLLECTOR_ADMIN` | to initialize | `G…` admin. Falls back to `STELLAR_RELAY_PUBLIC_KEY`. **Must be the deploying account** — `initialize` calls `admin.require_auth()`. |
-| `FEE_COLLECTOR_TREASURY` | to initialize | `G…` address that receives protocol fees. |
+| `FEE_COLLECTOR_ADMIN` | yes | `G…` admin. Falls back to `STELLAR_RELAY_PUBLIC_KEY`. **Must be the deploying account** — the constructor calls `admin.require_auth()`. |
+| `FEE_COLLECTOR_TREASURY` | yes | `G…` address that receives protocol fees. |
+| `ESCROW_ADMIN` | yes | `G…` admin able to pause new locks. Defaults to `FEE_COLLECTOR_ADMIN`. |
 | `FEE_BPS` | no | Protocol fee in bps. Default `50`, hard-capped at `200` by the contract. |
 | `ENV_FILE` | no | Where contract ids are written. Defaults to the repo-root `.env`. |
 
@@ -71,8 +72,15 @@ cd contract/soroban && ./scripts/deploy.sh testnet
 ```
 
 That one command runs the test suite, builds the wasm, deploys every contract in
-the manifest, writes each id into `.env`, records them in
-`deployments/testnet.json`, and initializes `fee_collector`.
+the manifest, writes each id into `.env`, and records them in
+`deployments/testnet.json`.
+
+Every contract is configured by its `__constructor`, which runs inside the
+deploy transaction. There is no separate initialize step to run — and no window
+in which someone else could run it first, which is what made the old
+`initialize()` entry point front-runnable (#172). The constructor arguments
+above are therefore required, not optional: the script checks them before it
+spends anything, because a constructor argument cannot be supplied afterwards.
 
 Options:
 
@@ -82,13 +90,11 @@ Options:
 | `--skip-build` | Reuse the wasm already in `target/` |
 | `--skip-tests` | Do not run `cargo test` first |
 | `--redeploy` | Deploy fresh instances even if ids are already recorded |
-| `--reinitialize` | Re-run initialization against an existing deployment |
 
-Re-running is safe by default: contracts with a recorded id are left alone, and
-`escrow` and `fee_collector` are only initialized on the run that actually
-deploys them. Both reject a second `initialize` with `AlreadyInitialized`, so
-`--reinitialize` against a configured instance surfaces that error rather than
-silently overwriting.
+Re-running is safe by default: contracts with a recorded id are left alone.
+Reconfiguring an existing deployment is not possible — configuration is fixed at
+deploy time — so changing an admin or treasury means deploying a fresh instance
+with `--redeploy`.
 
 Mainnet asks you to type `mainnet` to confirm before spending anything:
 
@@ -105,7 +111,8 @@ STELLAR_SOROBAN_RPC_URL="https://your-provider.example" ./scripts/deploy.sh main
 For each contract this checks that the id is set in `.env`, matches
 `deployments/<network>.json`, resolves to a live (non-archived) contract, and
 that the deployed wasm exposes the entry points we expect. For `fee_collector`
-it also reads back `get_fee_bps` and checks it against the 200 bps cap. Exits
+it also reads back `get_fee_bps` and checks it against the 200 bps cap; for
+`escrow` it reads back the admin and whether the contract is paused. Exits
 non-zero on any failure, so it can gate a pipeline.
 
 ### Adding a contract
@@ -123,8 +130,9 @@ CONTRACTS=(
 
 The wasm stem is the crate name with `-` replaced by `_`. Both scripts pick it
 up from there; add its expected entry points to `expected_fns()` in
-[`scripts/verify.sh`](scripts/verify.sh) and any post-deploy initialization to
-the initialize section of [`scripts/deploy.sh`](scripts/deploy.sh).
+[`scripts/verify.sh`](scripts/verify.sh), and its constructor arguments to
+`constructor_args()` and `required_admin_vars()` in
+[`scripts/lib.sh`](scripts/lib.sh).
 
 ### CI
 

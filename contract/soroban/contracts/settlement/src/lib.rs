@@ -1,17 +1,9 @@
 #![no_std]
-use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, panic_with_error, Address, Env,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
 
 #[contracttype]
 pub enum DataKey {
     Admin,
-}
-
-#[contracterror]
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum SettlementError {
-    AlreadyInitialized = 1,
 }
 
 #[contract]
@@ -19,16 +11,16 @@ pub struct SettlementContract;
 
 #[contractimpl]
 impl SettlementContract {
-    pub fn initialize(env: Env, admin: Address) {
-        if env.storage().instance().has(&DataKey::Admin) {
-            panic_with_error!(&env, SettlementError::AlreadyInitialized);
-        }
+    /// Runs atomically as part of the deploy transaction, so there is no window
+    /// in which an attacker can claim admin of a freshly deployed instance.
+    pub fn __constructor(env: Env, admin: Address) {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
     }
 
-    pub fn get_admin(env: Env) -> Option<Address> {
-        env.storage().instance().get(&DataKey::Admin)
+    /// Always set: the constructor cannot be skipped.
+    pub fn get_admin(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Admin).unwrap()
     }
 }
 

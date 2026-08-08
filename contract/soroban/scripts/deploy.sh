@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build, deploy and initialize every Soroban contract in the workspace.
+# Build and deploy every Soroban contract in the workspace. Each contract is
+# configured by its __constructor, inside the deploy transaction.
 #
 #   ./scripts/deploy.sh [testnet|mainnet] [options]
 #
@@ -8,7 +9,6 @@
 #   --skip-build    reuse the wasm already in target/
 #   --skip-tests    do not run cargo test first
 #   --redeploy      deploy fresh instances even if ids are already recorded
-#   --reinitialize  re-run initialization against an existing deployment
 #
 # Contract ids are written to the repo-root .env (override with ENV_FILE) and
 # recorded in deployments/<network>.json. Re-running is safe: already-deployed
@@ -20,13 +20,13 @@
 #                            STELLAR_RELAY_KEYPAIR_SECRET)
 # Required on mainnet:
 #   STELLAR_SOROBAN_RPC_URL RPC provider endpoint
-# fee_collector initialization:
+# Constructor arguments (passed at deploy time; there is no separate
+# initialize step, so these are required, not optional):
 #   FEE_COLLECTOR_ADMIN     G… admin (falls back to STELLAR_RELAY_PUBLIC_KEY).
-#                           `initialize` calls admin.require_auth(), so the
+#                           The constructor calls admin.require_auth(), so the
 #                           admin must be the deploying account.
 #   FEE_COLLECTOR_TREASURY  G… treasury address
 #   FEE_BPS                 protocol fee in bps (default 50, max 200)
-# escrow initialization:
 #   ESCROW_ADMIN            G… admin able to pause new locks
 #                           (defaults to FEE_COLLECTOR_ADMIN)
 
@@ -38,7 +38,6 @@ ASSUME_YES=0
 SKIP_BUILD=0
 SKIP_TESTS=0
 REDEPLOY=0
-REINITIALIZE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,8 +46,7 @@ while [ $# -gt 0 ]; do
     --skip-build) SKIP_BUILD=1 ;;
     --skip-tests) SKIP_TESTS=1 ;;
     --redeploy) REDEPLOY=1 ;;
-    --reinitialize) REINITIALIZE=1 ;;
-    -h | --help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "unknown argument '$1' (try --help)" ;;
   esac
   shift
@@ -67,6 +65,14 @@ DEPLOY_SECRET="${SOROBAN_DEPLOY_SECRET:-${STELLAR_SECRET_KEY:-${STELLAR_RELAY_KE
 # Command-line arguments are readable by any other process on the host via
 # /proc/<pid>/cmdline; the environment of a process is not.
 export STELLAR_ACCOUNT="$DEPLOY_SECRET"
+
+# Constructor arguments. Resolved before any deploy so a missing admin fails
+# fast rather than after the first contract is already on-chain.
+ESCROW_ADMIN="${ESCROW_ADMIN:-${FEE_COLLECTOR_ADMIN:-${STELLAR_RELAY_PUBLIC_KEY:-}}}"
+FEE_COLLECTOR_ADMIN="${FEE_COLLECTOR_ADMIN:-${STELLAR_RELAY_PUBLIC_KEY:-}}"
+FEE_COLLECTOR_TREASURY="${FEE_COLLECTOR_TREASURY:-}"
+FEE_BPS="${FEE_BPS:-50}"
+export ESCROW_ADMIN FEE_COLLECTOR_ADMIN FEE_COLLECTOR_TREASURY FEE_BPS
 
 info "Deploying Soroban contracts → ${NETWORK}"
 step "rpc      $RPC_URL"
@@ -96,11 +102,23 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
 fi
 
 # ── Deploy ───────────────────────────────────────────────────────────────────
+# A constructor argument cannot be supplied after the fact, so a contract that
+# is missing one cannot be deployed at all. Check before spending any fees.
+for entry in "${CONTRACTS[@]}"; do
+  name="${entry%%:*}"
+  env_var="${entry##*:}"
+  existing="$(lookup_contract_id "$env_var" "$name")"
+  [ -n "$existing" ] && [ "$existing" != "C..." ] && [ "$REDEPLOY" -eq 0 ] && continue
+  while read -r var; do
+    [ -n "$var" ] || continue
+    [ -n "${!var:-}" ] || fail "$name needs $var set — it is a constructor argument"
+  done <<<"$(required_admin_vars "$name")"
+done
+
 info "Deploying"
 
 declare -a DEPLOYED_NAMES=()
 declare -a DEPLOYED_IDS=()
-declare -a FRESHLY_DEPLOYED=()
 
 for entry in "${CONTRACTS[@]}"; do
   name="${entry%%:*}"
@@ -118,12 +136,21 @@ for entry in "${CONTRACTS[@]}"; do
   fi
 
   step "deploying $name…"
+  # Constructor args run inside the deploy transaction, so the contract is
+  # configured the moment it exists.
+  ctor_args=()
+  while read -r arg; do
+    [ -n "$arg" ] || continue
+    ctor_args+=("$arg")
+  done <<<"$(constructor_args "$name")"
+
   # The id is the last line of stdout; `set -o pipefail` still surfaces a
   # failed deploy through the pipe.
   contract_id="$(stellar contract deploy \
     --wasm "$wasm" \
     "${NETWORK_ARGS[@]}" \
-    --quiet | tail -n 1)"
+    --quiet \
+    ${ctor_args[@]+-- "${ctor_args[@]}"} | tail -n 1)"
 
   [ -n "$contract_id" ] || fail "$name deploy returned no contract id"
 
@@ -133,16 +160,8 @@ for entry in "${CONTRACTS[@]}"; do
 
   DEPLOYED_NAMES+=("$name")
   DEPLOYED_IDS+=("$contract_id")
-  FRESHLY_DEPLOYED+=("$name")
 done
 
-was_freshly_deployed() {
-  local candidate="$1" n
-  for n in ${FRESHLY_DEPLOYED[@]+"${FRESHLY_DEPLOYED[@]}"}; do
-    [ "$n" = "$candidate" ] && return 0
-  done
-  return 1
-}
 
 # ── Record ───────────────────────────────────────────────────────────────────
 mkdir -p "$DEPLOYMENTS_DIR"
@@ -159,75 +178,6 @@ mkdir -p "$DEPLOYMENTS_DIR"
   printf '  }\n}\n'
 } >"$(deployment_file)"
 ok "recorded ${#DEPLOYED_NAMES[@]} contract id(s) in ${DEPLOYMENTS_DIR#"$REPO_ROOT"/}/$NETWORK.json"
-
-# ── Initialize ───────────────────────────────────────────────────────────────
-# Every contract rejects a second `initialize` with
-# AlreadyInitialized, so re-running is safe but noisy; initialization is
-# attempted only for contracts this run actually deployed, unless the caller
-# passes --reinitialize (which will surface the contract's own error if the
-# instance was already configured).
-#
-# `escrow` MUST be initialized: it refuses to lock funds without an admin, so
-# that an incident always has someone able to pause new locks.
-info "Initializing"
-
-admin="${FEE_COLLECTOR_ADMIN:-${STELLAR_RELAY_PUBLIC_KEY:-}}"
-treasury="${FEE_COLLECTOR_TREASURY:-}"
-fee_bps="${FEE_BPS:-50}"
-
-# should_initialize <name> <id> — echoes nothing, returns 0 when the caller
-# should run this contract's initializer.
-should_initialize() {
-  local name="$1" id="$2"
-  if [ -z "$id" ]; then
-    warn "$name not deployed — skipping initialization"
-    return 1
-  fi
-  if ! was_freshly_deployed "$name" && [ "$REINITIALIZE" -eq 0 ]; then
-    ok "$name already deployed — leaving its config alone (--reinitialize to overwrite)"
-    return 1
-  fi
-  return 0
-}
-
-fee_collector_id="$(lookup_contract_id SOROBAN_FEE_COLLECTOR_CONTRACT_ID fee_collector)"
-if should_initialize fee_collector "$fee_collector_id"; then
-  if [ -z "$admin" ] || [ -z "$treasury" ]; then
-    warn "set FEE_COLLECTOR_ADMIN and FEE_COLLECTOR_TREASURY to initialize fee_collector"
-    warn "deploy is complete, but fee_collector is unconfigured"
-  else
-    step "initializing fee_collector (fee_bps=$fee_bps)…"
-    stellar contract invoke \
-      --id "$fee_collector_id" \
-      "${NETWORK_ARGS[@]}" \
-      --quiet \
-      -- initialize \
-      --admin "$admin" \
-      --fee_bps "$fee_bps" \
-      --treasury "$treasury" >/dev/null ||
-      fail "fee_collector initialize failed — the deploying account must be able to sign as admin ($admin)"
-    ok "fee_collector initialized"
-  fi
-fi
-
-escrow_id="$(lookup_contract_id SOROBAN_ESCROW_CONTRACT_ID escrow)"
-escrow_admin="${ESCROW_ADMIN:-$admin}"
-if should_initialize escrow "$escrow_id"; then
-  if [ -z "$escrow_admin" ]; then
-    warn "set ESCROW_ADMIN (or FEE_COLLECTOR_ADMIN) to initialize escrow"
-    warn "escrow will REJECT every lock until it is initialized"
-  else
-    step "initializing escrow…"
-    stellar contract invoke \
-      --id "$escrow_id" \
-      "${NETWORK_ARGS[@]}" \
-      --quiet \
-      -- initialize \
-      --admin "$escrow_admin" >/dev/null ||
-      fail "escrow initialize failed — the deploying account must be able to sign as admin ($escrow_admin)"
-    ok "escrow initialized"
-  fi
-fi
 
 info "Done"
 step "verify with: ./scripts/verify.sh $NETWORK"
