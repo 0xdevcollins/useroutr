@@ -53,8 +53,14 @@ export function ConfirmPageClient({ params }: ConfirmPageClientProps) {
     }
   }, [status, paymentId, router]);
 
+  // Terminal states for the confirm screen. REFUNDING/REFUNDED are included so
+  // a payer whose funds are on the way back sees why, rather than a spinner
+  // that never resolves.
   const isError =
-    status === "FAILED" || status === "EXPIRED" || status === "HTLC_TIMEOUT";
+    status === "FAILED" ||
+    status === "EXPIRED" ||
+    status === "REFUNDING" ||
+    status === "REFUNDED";
 
   if (isLoading) {
     return (
