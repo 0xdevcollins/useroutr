@@ -29,6 +29,7 @@
 #   FEE_BPS                 protocol fee in bps (default 50, max 200)
 #   ESCROW_ADMIN            G… admin able to pause new locks
 #                           (defaults to FEE_COLLECTOR_ADMIN)
+#   SETTLEMENT_ADMIN        G… admin (defaults to FEE_COLLECTOR_ADMIN)
 
 # shellcheck source=./lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -46,7 +47,7 @@ while [ $# -gt 0 ]; do
     --skip-build) SKIP_BUILD=1 ;;
     --skip-tests) SKIP_TESTS=1 ;;
     --redeploy) REDEPLOY=1 ;;
-    -h | --help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) fail "unknown argument '$1' (try --help)" ;;
   esac
   shift
@@ -72,7 +73,8 @@ ESCROW_ADMIN="${ESCROW_ADMIN:-${FEE_COLLECTOR_ADMIN:-${STELLAR_RELAY_PUBLIC_KEY:
 FEE_COLLECTOR_ADMIN="${FEE_COLLECTOR_ADMIN:-${STELLAR_RELAY_PUBLIC_KEY:-}}"
 FEE_COLLECTOR_TREASURY="${FEE_COLLECTOR_TREASURY:-}"
 FEE_BPS="${FEE_BPS:-50}"
-export ESCROW_ADMIN FEE_COLLECTOR_ADMIN FEE_COLLECTOR_TREASURY FEE_BPS
+SETTLEMENT_ADMIN="${SETTLEMENT_ADMIN:-${FEE_COLLECTOR_ADMIN:-${STELLAR_RELAY_PUBLIC_KEY:-}}}"
+export ESCROW_ADMIN FEE_COLLECTOR_ADMIN FEE_COLLECTOR_TREASURY FEE_BPS SETTLEMENT_ADMIN
 
 info "Deploying Soroban contracts → ${NETWORK}"
 step "rpc      $RPC_URL"

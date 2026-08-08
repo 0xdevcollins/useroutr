@@ -35,8 +35,9 @@ export STELLAR_ACCOUNT="$SOURCE_ACCOUNT"
 # wasm sitting at the recorded id.
 expected_fns() {
   case "$1" in
-    escrow) printf '%s\n' pause unpause is_paused lock release dispute resolve auto_release get_escrow get_admin ;;
+    escrow) printf '%s\n' pause unpause is_paused lock release dispute resolve auto_release expire_dispute get_escrow get_admin ;;
     fee_collector) printf '%s\n' deduct set_fee_bps get_fee_bps ;;
+    settlement) printf '%s\n' get_admin ;;
   esac
 }
 
@@ -113,7 +114,7 @@ for entry in "${CONTRACTS[@]}"; do
         ok "fee_bps = $fee_bps"
       fi
       ;;
-    escrow)
+    escrow | settlement)
       # The constructor guarantees an admin, so a missing one means the
       # deployed wasm is not what we think it is.
       admin="$(stellar contract invoke \
