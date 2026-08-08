@@ -90,6 +90,13 @@ async function bootstrap() {
     exclude: ['healthz', 'readyz', '/'],
   });
 
+  // Without this, SIGTERM kills the process outright: Node's default handler
+  // exits before Nest runs a single shutdown hook. The process does stop — but
+  // in-flight requests are cut mid-response, queue workers never drain, and
+  // Prisma/Redis connections are dropped rather than closed. Enabling the hooks
+  // makes a rolling deploy or a container stop drain instead of sever.
+  app.enableShutdownHooks();
+
   await app.listen(process.env.PORT ?? 3000);
 
   console.log(
