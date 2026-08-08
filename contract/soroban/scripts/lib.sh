@@ -33,14 +33,16 @@ find_wasm() {
 # One line per deployable contract: "<wasm-stem>:<env-var>". The wasm stem is
 # the crate name with `-` replaced by `_`, which is what cargo emits. Add new
 # contracts here and both deploy.sh and verify.sh pick them up.
-# `settlement` is deliberately absent. The contract it names was removed in
-# 27fc6dd as legacy: it modelled the pre-CCTP HTLC settle/confirm flow, nothing
-# reads its id, and the crate here is an unrelated stub. Deploying that stub
-# over the orphaned testnet instance would replace a working contract with one
-# that cannot settle anything.
+# `settlement` here is the crate from #169 — a scaffold with an admin and
+# nothing else. It shares only a name with the pre-CCTP HTLC settle/confirm
+# contract removed in 27fc6dd, whose last deployment (CA4HRLEK… on testnet) is
+# an orphan nothing reads. Deploying this crate mints a *new* id; it does not
+# touch that instance. Pointing the env var at a contract we can actually
+# rebuild beats pointing it at one whose source we deleted.
 CONTRACTS=(
   "escrow:SOROBAN_ESCROW_CONTRACT_ID"
   "fee_collector:SOROBAN_FEE_COLLECTOR_CONTRACT_ID"
+  "settlement:SOROBAN_SETTLEMENT_CONTRACT_ID"
 )
 
 # Constructor arguments per contract, echoed one per line. Every contract is
@@ -57,6 +59,9 @@ constructor_args() {
         --fee_bps "$FEE_BPS" \
         --treasury "$FEE_COLLECTOR_TREASURY"
       ;;
+    settlement)
+      printf '%s\n' --admin "$SETTLEMENT_ADMIN"
+      ;;
   esac
 }
 
@@ -65,6 +70,7 @@ required_admin_vars() {
   case "$1" in
     escrow) printf '%s\n' ESCROW_ADMIN ;;
     fee_collector) printf '%s\n' FEE_COLLECTOR_ADMIN FEE_COLLECTOR_TREASURY ;;
+    settlement) printf '%s\n' SETTLEMENT_ADMIN ;;
   esac
 }
 
