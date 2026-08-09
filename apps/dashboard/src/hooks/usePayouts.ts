@@ -27,14 +27,14 @@ export interface PayoutsParams extends Record<string, unknown> {
 export function usePayouts(params: PayoutsParams = {}) {
   return useQuery<PayoutListResponse>({
     queryKey: ["payouts", params],
-    queryFn: () => api.get("/v1/payouts", { params }),
+    queryFn: () => api.get("/payouts", { params }),
   });
 }
 
 export function usePayout(id: string) {
   return useQuery<Payout>({
     queryKey: ["payout", id],
-    queryFn: () => api.get(`/v1/payouts/${id}`),
+    queryFn: () => api.get(`/payouts/${id}`),
     enabled: !!id,
   });
 }
@@ -44,7 +44,7 @@ export function useRetryPayout() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      return api.post<Payout>(`/v1/payouts/${id}/retry`);
+      return api.post<Payout>(`/payouts/${id}/retry`);
     },
     onSuccess: (_, id) => {
       // Invalidate the specific payout and the list
@@ -59,7 +59,7 @@ export function useCancelPayout() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      return api.post<Payout>(`/v1/payouts/${id}/cancel`);
+      return api.post<Payout>(`/payouts/${id}/cancel`);
     },
     onSuccess: (_, id) => {
       // Invalidate the specific payout and the list
