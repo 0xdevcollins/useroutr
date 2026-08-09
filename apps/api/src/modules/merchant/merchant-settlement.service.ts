@@ -5,7 +5,9 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import * as StellarSdk from '@stellar/stellar-sdk';
@@ -233,6 +235,166 @@ export class MerchantSettlementService {
    * for `Keypair.fromSecret`. Only call from places that immediately use
    * the seed to sign — never persist or log the result.
    */
+  /**
+   * Move USDC out of a merchant's managed settlement wallet to an address they
+   * control. The escape hatch that makes managed custody defensible: without
+   * it, a merchant can take payments and never get the money out.
+   *
+   * Every check here exists because skipping it loses funds:
+   *
+   *  - a malformed destination is unrecoverable once submitted
+   *  - a destination with no USDC trustline rejects the payment, and on
+   *    Stellar that is a failed transaction rather than a bounce
+   *  - `amount` is compared against the *USDC* balance, never XLM: draining
+   *    XLM would drop the account below its reserve and freeze it
+   *
+   * The audit row is written before submission and updated after, so a
+   * withdrawal that vanishes mid-flight leaves a record saying so rather than
+   * no record at all.
+   */
+  async withdraw(
+    merchantId: string,
+    params: { destinationAddress: string; amount: string; asset?: string },
+  ): Promise<{
+    stellarTxHash: string;
+    amount: string;
+    asset: string;
+    destinationAddress: string;
+    submittedAt: string;
+  }> {
+    const asset = (params.asset ?? 'USDC').toUpperCase();
+    if (asset !== 'USDC') {
+      throw new BadRequestException('Only USDC withdrawals are supported');
+    }
+
+    if (!StellarSdk.StrKey.isValidEd25519PublicKey(params.destinationAddress)) {
+      throw new BadRequestException(
+        'destinationAddress must be a valid Stellar public key (G...)',
+      );
+    }
+
+    const row = await this.prisma.merchantSettlementKey.findUnique({
+      where: { merchantId },
+    });
+    if (!row) {
+      throw new NotFoundException('No settlement wallet for this merchant');
+    }
+    if (!row.managed) {
+      // A passkey wallet signs client-side; there is no seed here to use.
+      throw new BadRequestException(
+        'This settlement wallet is self-custodied. Withdraw with your passkey instead.',
+      );
+    }
+
+    const usdc = new StellarSdk.Asset('USDC', this.usdcIssuer);
+    const account = await this.horizon.loadAccount(row.stellarAddress);
+
+    const usdcBalance = account.balances.find(
+      (b) =>
+        'asset_code' in b &&
+        b.asset_code === 'USDC' &&
+        'asset_issuer' in b &&
+        b.asset_issuer === this.usdcIssuer,
+    );
+    const available = new Prisma.Decimal(usdcBalance?.balance ?? '0');
+
+    const amount =
+      params.amount === 'all' ? available : new Prisma.Decimal(params.amount);
+
+    if (amount.lte(0)) {
+      throw new BadRequestException('amount must be greater than zero');
+    }
+    if (amount.gt(available)) {
+      throw new BadRequestException(
+        `Insufficient USDC: balance is ${available.toString()}`,
+      );
+    }
+
+    // Stellar rejects a payment to an account without a trustline for the
+    // asset, and a rejected payment is a failed transaction, not a refund.
+    // Better to say so before the merchant watches it fail.
+    const destination = await this.horizon
+      .loadAccount(params.destinationAddress)
+      .catch(() => null);
+    if (!destination) {
+      throw new UnprocessableEntityException(
+        'The destination account does not exist on Stellar yet. It must be funded before it can receive USDC.',
+      );
+    }
+    const hasTrustline = destination.balances.some(
+      (b) =>
+        'asset_code' in b &&
+        b.asset_code === 'USDC' &&
+        'asset_issuer' in b &&
+        b.asset_issuer === this.usdcIssuer,
+    );
+    if (!hasTrustline) {
+      throw new UnprocessableEntityException(
+        'The destination address must have a USDC trustline before it can receive USDC.',
+      );
+    }
+
+    const audit = await this.prisma.settlementWithdrawal.create({
+      data: {
+        merchantId,
+        amount: amount.toString(),
+        asset,
+        destinationAddress: params.destinationAddress,
+        status: 'submitting',
+      },
+    });
+
+    try {
+      const kp = StellarSdk.Keypair.fromSecret(this.decryptSeed(row));
+      const source = await this.horizon.loadAccount(kp.publicKey());
+
+      const tx = new StellarSdk.TransactionBuilder(source, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(
+          StellarSdk.Operation.payment({
+            destination: params.destinationAddress,
+            asset: usdc,
+            amount: amount.toString(),
+          }),
+        )
+        .setTimeout(30)
+        .build();
+      tx.sign(kp);
+
+      const submitted = await this.horizon.submitTransaction(tx);
+      const stellarTxHash = submitted.hash;
+
+      const updated = await this.prisma.settlementWithdrawal.update({
+        where: { id: audit.id },
+        data: { status: 'submitted', stellarTxHash },
+      });
+
+      this.logger.log(
+        `Withdrew ${amount.toString()} USDC for ${merchantId} → ${params.destinationAddress} (${stellarTxHash})`,
+      );
+
+      return {
+        stellarTxHash,
+        amount: amount.toString(),
+        asset,
+        destinationAddress: params.destinationAddress,
+        submittedAt: updated.createdAt.toISOString(),
+      };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      await this.prisma.settlementWithdrawal.update({
+        where: { id: audit.id },
+        data: { status: 'failed', failureReason: reason },
+      });
+      this.logger.error(`Withdrawal failed for ${merchantId}: ${reason}`);
+      throw new ServiceUnavailableException(
+        `Withdrawal could not be submitted: ${reason}`,
+      );
+    }
+  }
+
   decryptSeed(row: {
     encryptedSeed: string | null;
     iv: string | null;

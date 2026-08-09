@@ -10,6 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { TeamRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentMerchant } from './decorators/current-merchant.decorator';
@@ -17,7 +18,9 @@ import { Roles } from './decorators/roles.decorator';
 import { BrandingDto } from './dto/branding.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { KybSubmissionDto } from './dto/kyb-submission.dto';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { SettlementDto } from './dto/settlement.dto';
+import { WithdrawSchema, type WithdrawDto } from './dto/withdraw.dto';
 import { UpdateMerchantDto } from './dto/update-merchant.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { RolesGuard } from './guards/roles.guard';
@@ -74,6 +77,29 @@ export class MerchantController {
   @HttpCode(HttpStatus.OK)
   provisionSettlement(@CurrentMerchant('id') merchantId: string) {
     return this.settlement.provision(merchantId);
+  }
+
+  /**
+   * Move USDC out of the managed settlement wallet to an address the merchant
+   * controls. Without this, managed custody is a roach motel: payments go in
+   * and nothing comes out.
+   *
+   * Rate-limited to 3/hour — a compromised session should not be able to
+   * drain a balance in a burst.
+   *
+   * This overrides the `default` bucket for this route rather than adding a
+   * named global one. A named throttler registered in ThrottlerModule.forRoot
+   * applies to *every* route, so a global `withdraw` bucket at 3/hour would
+   * have capped the entire API at three requests an hour.
+   */
+  @Post('me/settlement/withdraw')
+  @Throttle({ default: { limit: 3, ttl: 3_600_000 } })
+  @HttpCode(HttpStatus.OK)
+  withdrawSettlement(
+    @CurrentMerchant('id') merchantId: string,
+    @Body(new ZodValidationPipe(WithdrawSchema)) dto: WithdrawDto,
+  ) {
+    return this.settlement.withdraw(merchantId, dto);
   }
 
   // ── Branding ─────────────────────────────────────────────────
