@@ -6,8 +6,13 @@ import {
   useContext,
   type ReactNode,
 } from "react";
+<<<<<<< Updated upstream
 import { Navbar } from "@/components/v2/Navbar";
 import { Footer } from "@/components/v2/Footer";
+=======
+import { Navbar } from "./Navbar";
+import { Footer } from "./Footer";
+>>>>>>> Stashed changes
 import { WaitlistModal } from "./WaitlistModal";
 
 interface WaitlistApi {
@@ -34,7 +39,11 @@ export function PageShell({ children }: { children: ReactNode }) {
   return (
     <WaitlistCtx.Provider value={api}>
       <Navbar onWaitlistClick={api.open} />
+<<<<<<< Updated upstream
       <main>{children}</main>
+=======
+      <main className="pt-[68px]">{children}</main>
+>>>>>>> Stashed changes
       <Footer />
       <WaitlistModal open={open} onOpenChange={setOpen} />
     </WaitlistCtx.Provider>

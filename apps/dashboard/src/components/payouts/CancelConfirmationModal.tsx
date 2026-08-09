@@ -43,23 +43,23 @@ export function CancelConfirmationModal({
           </div>
           <AlertDialogDescription className="pt-2">
             Are you sure you want to cancel this payout?
-            {recipientName && amount && currency && (
-              <div className="mt-2 rounded-lg bg-muted p-3 text-sm">
-                <span className="font-medium">{recipientName}</span>
-                <span className="text-muted-foreground"> — </span>
-                <span className="font-medium">
-                  {new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: currency,
-                  }).format(Number(amount))}
-                </span>
-              </div>
-            )}
-            <p className="mt-3 text-sm text-muted-foreground">
-              This action cannot be undone. The payout will be marked as cancelled and
-              the funds will remain in your account.
-            </p>
           </AlertDialogDescription>
+          {recipientName && amount && currency && (
+            <div className="rounded-lg bg-muted p-3 text-sm">
+              <span className="font-medium">{recipientName}</span>
+              <span className="text-muted-foreground"> — </span>
+              <span className="font-medium">
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: currency,
+                }).format(Number(amount))}
+              </span>
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground">
+            This action cannot be undone. The payout will be marked as cancelled and
+            the funds will remain in your account.
+          </p>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={() => onOpenChange(false)} disabled={isLoading}>

@@ -50,6 +50,7 @@ const jetMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+<<<<<<< Updated upstream
   title:
     "Useroutr — Payouts to bank accounts & mobile money, settled on Stellar",
   description:
@@ -62,27 +63,54 @@ export const metadata: Metadata = {
     "USDC to NGN",
     "stellar payments",
     "bulk disbursement API",
+=======
+  title: "Useroutr — Pay anything. Settle everywhere.",
+  description:
+    "Non-custodial cross-chain payment infrastructure built on Stellar. One SDK, one API, one dashboard for accepting payments and settling them where you want.",
+  keywords: [
+    "non-custodial payment processor",
+    "stellar payment gateway",
+    "crypto payment infrastructure",
+    "cross-chain payment API",
+    "USDC payment processing",
+    "MoneyGram API",
+    "stellar soroban payments",
+    "global payouts API",
+>>>>>>> Stashed changes
     "Useroutr",
   ],
   authors: [{ name: "Useroutr" }],
   creator: "Useroutr",
   publisher: "Useroutr",
   formatDetection: { email: false, address: false, telephone: false },
+<<<<<<< Updated upstream
   metadataBase: new URL("https://useroutr.com"),
+=======
+  metadataBase: new URL("https://useroutr.io"),
+>>>>>>> Stashed changes
   alternates: { canonical: "/" },
   openGraph: {
     title:
       "Useroutr — Payouts to bank accounts & mobile money, settled on Stellar",
     description:
+<<<<<<< Updated upstream
       "Accept USDC from any major chain and deliver to bank accounts and mobile money in Nigeria — settled on Stellar.",
     url: "https://useroutr.com",
+=======
+      "Non-custodial cross-chain payment infrastructure built on Stellar. Useroutr never holds the money in between.",
+    url: "https://useroutr.io",
+>>>>>>> Stashed changes
     siteName: "Useroutr",
     images: [
       {
         url: "/og-image.jpg",
         width: 1200,
         height: 630,
+<<<<<<< Updated upstream
         alt: "Useroutr — cross-border payouts settled on Stellar",
+=======
+        alt: "Useroutr — non-custodial cross-chain payments",
+>>>>>>> Stashed changes
       },
     ],
     locale: "en_US",
@@ -93,7 +121,11 @@ export const metadata: Metadata = {
     title:
       "Useroutr — Payouts to bank accounts & mobile money, settled on Stellar",
     description:
+<<<<<<< Updated upstream
       "The payout platform for businesses paying Africa. Settled on Stellar.",
+=======
+      "Non-custodial cross-chain payment infrastructure built on Stellar.",
+>>>>>>> Stashed changes
     creator: "@useroutr",
     images: ["/twitter-image.jpg"],
   },

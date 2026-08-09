@@ -32,9 +32,12 @@ jest.mock('../prisma/prisma.service', () => ({
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+<<<<<<< Updated upstream
 import { MerchantSettlementService } from '../merchant/merchant-settlement.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import { SETTLEMENT_PROVISION_QUEUE } from '../merchant/settlement-provision.constants';
+=======
+>>>>>>> Stashed changes
 
 interface MockMerchant {
   id: string;
@@ -88,6 +91,7 @@ const mockJwtService = {
 const mockNotificationsService = {
   sendVerificationCodeEmail: jest.fn().mockResolvedValue(undefined),
   sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+<<<<<<< Updated upstream
   notifyApiKeyCreated: jest.fn().mockResolvedValue(undefined),
 };
 
@@ -100,6 +104,8 @@ const mockSettlementService = {
 // The provisioning queue register() writes to instead of waiting on Stellar.
 const mockProvisionQueue = {
   add: jest.fn().mockResolvedValue({ id: 'job_1' }),
+=======
+>>>>>>> Stashed changes
 };
 
 describe('AuthService', () => {
@@ -112,6 +118,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: JwtService, useValue: mockJwtService },
         {
+<<<<<<< Updated upstream
           provide: getQueueToken(SETTLEMENT_PROVISION_QUEUE),
           useValue: mockProvisionQueue,
         },
@@ -123,6 +130,11 @@ describe('AuthService', () => {
           provide: MerchantSettlementService,
           useValue: mockSettlementService,
         },
+=======
+          provide: NotificationsService,
+          useValue: mockNotificationsService,
+        },
+>>>>>>> Stashed changes
       ],
     }).compile();
 

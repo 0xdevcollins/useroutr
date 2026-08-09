@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard.js';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard.js';
+<<<<<<< Updated upstream
 import { BullModule } from '@nestjs/bullmq';
 import { SETTLEMENT_PROVISION_QUEUE } from '../merchant/settlement-provision.constants';
 import { NotificationsModule } from '../notifications/notifications.module.js';
@@ -17,6 +18,9 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
 // PrismaService + ConfigService, both globally available, so dropping it
 // in this provider list is safe.
 import { MerchantSettlementService } from '../merchant/merchant-settlement.service.js';
+=======
+import { NotificationsModule } from '../notifications/notifications.module.js';
+>>>>>>> Stashed changes
 
 @Module({
   imports: [
@@ -45,9 +49,12 @@ import { MerchantSettlementService } from '../merchant/merchant-settlement.servi
       },
     }),
     NotificationsModule,
+<<<<<<< Updated upstream
     // Registration enqueues settlement-wallet provisioning rather than waiting
     // on two Stellar round trips inside the request.
     BullModule.registerQueue({ name: SETTLEMENT_PROVISION_QUEUE }),
+=======
+>>>>>>> Stashed changes
   ],
   providers: [
     AuthService,

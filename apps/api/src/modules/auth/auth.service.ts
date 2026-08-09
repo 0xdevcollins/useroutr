@@ -19,7 +19,10 @@ import * as crypto from 'crypto';
 import type { Merchant } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+<<<<<<< Updated upstream
 import { MerchantSettlementService } from '../merchant/merchant-settlement.service.js';
+=======
+>>>>>>> Stashed changes
 import type { RegisterDto } from './dto/register.dto.js';
 import type { LoginDto } from './dto/login.dto.js';
 import type { JwtPayload } from './strategies/jwt.strategy.js';
@@ -67,9 +70,12 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly notifications: NotificationsService,
+<<<<<<< Updated upstream
     private readonly settlement: MerchantSettlementService,
     @InjectQueue(SETTLEMENT_PROVISION_QUEUE)
     private readonly provisionQueue: Queue,
+=======
+>>>>>>> Stashed changes
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -95,6 +101,7 @@ export class AuthService {
       },
     });
 
+<<<<<<< Updated upstream
     // Provisioning a managed Stellar settlement wallet (Approach A) makes two
     // live Stellar round trips — funding the account, then a trustline that
     // waits for a ledger close. Awaiting that here made every signup wait on a
@@ -122,6 +129,8 @@ export class AuthService {
       where: { id: merchant.id },
     });
 
+=======
+>>>>>>> Stashed changes
     await this.dispatchVerificationEmail(merchant.email, code);
 
     const tokens = await this.generateTokens(merchant.id, merchant.email);

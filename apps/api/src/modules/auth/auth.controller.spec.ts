@@ -19,8 +19,11 @@ const mockSafeMerchant: SafeMerchant = {
   id: 'cuid_merchant_1',
   name: 'Test Corp',
   email: 'test@example.com',
+<<<<<<< Updated upstream
   settlementHoldEnabled: false,
   settlementHoldSeconds: 604800,
+=======
+>>>>>>> Stashed changes
   emailVerifiedAt: null,
   verificationCodeHash: null,
   verificationCodeExpiresAt: null,
