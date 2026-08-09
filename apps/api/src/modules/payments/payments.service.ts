@@ -26,6 +26,7 @@ import { WebhooksService } from '../webhooks/webhooks.service';
 import { LinksService } from '../links/links.service';
 import { CctpService } from '../cctp/cctp.service';
 import { getDomain, type DomainEntry } from '../cctp/domains';
+import { BurnFeeService, FINALITY_FAST } from '../cctp/burn-fee.service';
 import {
   getEvmContracts,
   getUsdcAddress,
@@ -178,6 +179,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     private readonly webhooksService: WebhooksService,
     private readonly linksService: LinksService,
     private readonly cctpService: CctpService,
+    private readonly burnFees: BurnFeeService,
     @InjectQueue(CCTP_OBSERVE_QUEUE) private readonly cctpQueue: Queue,
     @InjectQueue(SETTLEMENT_HOLD_QUEUE) private readonly holdQueue: Queue,
     private readonly escrowService: EscrowService,
@@ -944,14 +946,34 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       amountSubunits,
     ]);
 
+    // Fast Transfer is not free, and asking for it without paying is not an
+    // error Circle reports back — it accepts the burn, then holds the message
+    // at `pending_confirmations` with `delayReason: insufficient_fee` and waits
+    // for hard finality anyway. This asked for `speed: 'fast'` with
+    // `maxFee: 0n`, so every payment took the slow path while the checkout
+    // promised 8–20 seconds.
+    //
+    // Ask Circle what the tier costs and offer exactly that. If the lookup
+    // fails, drop to standard finality rather than send a burn we know will be
+    // demoted: slower, but it is what actually happens, and the logs say so.
+    const destinationDomain = getDomain('stellar')!.domain;
+    const feeBps = await this.burnFees.minimumFeeBps(
+      source.domain,
+      destinationDomain,
+      FINALITY_FAST,
+    );
+    const speed = feeBps === null ? 'standard' : 'fast';
+    const maxFee =
+      feeBps === null ? 0n : this.burnFees.maxFeeFor(amountSubunits, feeBps);
+
     const burnPayload = await this.cctpService.prepareBurn({
       fromChain: sourceChain,
       toChain: 'stellar',
       amount: amountSubunits,
       recipient,
-      speed: 'fast',
+      speed,
       mintMode: 'forwarder',
-      maxFee: 0n,
+      maxFee,
     });
     if ('xdr' in burnPayload) {
       throw new Error('Unexpected Stellar payload for EVM source');

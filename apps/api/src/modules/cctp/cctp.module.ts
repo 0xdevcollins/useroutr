@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AttestationService } from './attestation.service.js';
+import { BurnFeeService } from './burn-fee.service.js';
 import { CctpService } from './cctp.service.js';
 import { EvmCctpClient } from './evm-cctp.client.js';
 import { ForwarderService } from './forwarder.service.js';
@@ -24,12 +25,13 @@ import { StellarCctpClient } from './stellar-cctp.client.js';
   imports: [ConfigModule],
   providers: [
     AttestationService,
+    BurnFeeService,
     ForwarderService,
     EvmCctpClient,
     StellarCctpClient,
     RouterService,
     CctpService,
   ],
-  exports: [RouterService, CctpService],
+  exports: [RouterService, CctpService, BurnFeeService],
 })
 export class CctpModule {}
