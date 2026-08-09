@@ -10,14 +10,23 @@ import type {
 interface PaymentLinksParams {
   page?: number;
   limit?: number;
+  /** "all" is normalised away server-side, so it is safe to pass through. */
   status?: string;
-  search?: string;
 }
 
 export function usePaymentLinks(params: PaymentLinksParams = {}) {
   return useQuery<PaymentLinksResponse>({
     queryKey: ["payment-links", params],
-    queryFn: () => api.get("/payment-links", { params: params as Record<string, unknown> }),
+    // `/payment-links` answers with `{ data, meta }`. The api client only
+    // unwraps the envelope when there is no `meta`, so both halves arrive here
+    // intact — which is what pagination needs.
+    queryFn: () =>
+      api.get<PaymentLinksResponse>("/payment-links", {
+        params: params as Record<string, unknown>,
+      }),
+    // Keeps the previous page on screen while the next one loads, instead of
+    // collapsing the list to a skeleton on every page change.
+    placeholderData: (previous) => previous,
   });
 }
 

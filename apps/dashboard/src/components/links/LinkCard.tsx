@@ -10,6 +10,7 @@ import {
 } from "@useroutr/ui";
 import { QrCode, Trash } from "@phosphor-icons/react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { LinkStatusBadge } from "./LinkStatusBadge";
 import { CopyButton } from "./CopyButton";
@@ -52,12 +53,19 @@ export function LinkCard({ link, onQRCode, onDeactivate }: LinkCardProps) {
     >
       {/* Header — mono ID + status */}
       <div className="flex items-center justify-between gap-2 border-b border-rule px-5 py-3">
-        <span
-          className="truncate text-[11px] text-text-faint"
+        {/*
+          The ID is the link to the detail page, rather than the whole card.
+          The footer holds a copy button, a QR button and a deactivate button,
+          and nesting those inside an anchor is invalid markup — every one of
+          them would also have to stop propagation to avoid navigating on click.
+        */}
+        <Link
+          href={`/links/${link.id}`}
+          className="truncate rounded text-[11px] text-text-faint underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ fontFamily: "var(--font-mono)" }}
         >
           {link.id}
-        </span>
+        </Link>
         <LinkStatusBadge status={link.status} />
       </div>
 
