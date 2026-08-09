@@ -13,7 +13,11 @@ import {
 } from './stellar-cctp.client.js';
 import { getDomain, enabledDomains } from './domains.js';
 import { STELLAR_CCTP, cctpEnvFromStellarNetwork } from './contracts.js';
-import type { CctpTransferRecord, CctpTransferRequest } from './types.js';
+import type {
+  AttestationResponse,
+  CctpTransferRecord,
+  CctpTransferRequest,
+} from './types.js';
 
 /**
  * High-level orchestrator for CCTP V2 transfers — the only surface PR C
@@ -131,11 +135,23 @@ export class CctpService {
       );
     }
 
-    // Step 3 — record the settlement. If Iris has a forwardTxHash, the
-    // mint is already on-chain. Otherwise the caller is on self-relay
-    // and would dispatch the mint themselves (not done here — kept
-    // separate so the service stays composable).
+    // Step 3 — get the mint on-chain.
+    //
+    // If Iris carries a forwardTxHash, Circle already broadcast it. For Stellar
+    // it never does: `mint_and_forward` on the CctpForwarder takes no
+    // authorisation and nobody is watching for us, so an attested message just
+    // sits there. Payments reached `complete` attestation and then stopped,
+    // one step short of the merchant actually being paid.
+    //
+    // So we submit it. The relay wallet pays the Soroban fee and nothing else —
+    // the USDC comes out of the attested message.
     const dest = getDomainByDomainNumber(burn.destinationDomain);
+    let mintTxHash = attestation.forwardTxHash;
+
+    if (!mintTxHash && dest?.kind === 'stellar') {
+      mintTxHash = await this.selfRelayStellarMint(attestation, txHash);
+    }
+
     return {
       request: {
         // Reconstructed from the burn — sufficient for downstream record-
@@ -156,8 +172,57 @@ export class CctpService {
         nonce: burn.nonce,
       },
       attestation,
-      mintTxHash: attestation.forwardTxHash,
+      mintTxHash,
     };
+  }
+
+  /**
+   * Submit the Stellar mint ourselves, once, and report the tx hash.
+   *
+   * Returns undefined rather than throwing when the mint cannot be made: the
+   * caller retries, and a payment that is merely un-minted is in a better state
+   * than one marked failed. A genuinely failed mint surfaces on the next
+   * attempt with the same error.
+   */
+  private async selfRelayStellarMint(
+    attestation: AttestationResponse,
+    burnTxHash: string,
+  ): Promise<string | undefined> {
+    const { message, attestation: signature, eventNonce } = attestation;
+
+    if (!message || !signature) {
+      this.logger.warn(
+        `Attestation for ${burnTxHash} is complete but carries no message/signature — cannot mint.`,
+      );
+      return undefined;
+    }
+
+    try {
+      // The worker retries, and `mint_and_forward` rejects a message it has
+      // already consumed. Without this check a successful mint would look
+      // identical to a broken one on the following attempt, and the payment
+      // would eventually be marked FAILED after the money had arrived.
+      if (eventNonce && (await this.stellar.isNonceUsed(eventNonce))) {
+        this.logger.log(
+          `CCTP message for ${burnTxHash} was already minted on Stellar — nothing to do.`,
+        );
+        return undefined;
+      }
+
+      const hash = await this.stellar.submitMintViaForwarder(
+        message,
+        signature,
+      );
+      this.logger.log(`Minted ${burnTxHash} on Stellar via forwarder: ${hash}`);
+      return hash;
+    } catch (err) {
+      this.logger.warn(
+        `Stellar self-relay mint failed for ${burnTxHash}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return undefined;
+    }
   }
 
   /**
