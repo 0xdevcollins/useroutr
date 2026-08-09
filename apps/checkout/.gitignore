@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the committed template. The root .gitignore already un-ignores it,
+# but this file's blanket `.env*` is more specific and was winning, so a new
+# apps/<app>/.env.example silently never got added.
+!.env.example
 
 # vercel
 .vercel
