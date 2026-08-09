@@ -16,12 +16,9 @@ import { AppModule } from './../src/app.module';
  *   docker compose up -d postgres redis
  *   npx prisma migrate deploy && npx prisma generate
  *
- * The generous hook timeout is not padding. `POST /auth/register` awaits
- * settlement-wallet provisioning, which makes two live Stellar testnet round
- * trips — Friendbot funding, then a USDC trustline that waits for a ledger
- * close. Typically ~10s, but it tracks testnet latency and has exceeded 60s.
- * Until signup stops blocking on the network, any suite that registers a
- * merchant inherits that.
+ * No live-network dependency: registration enqueues settlement-wallet
+ * provisioning rather than awaiting two Stellar round trips inside the
+ * request, so this suite's timing tracks the database rather than testnet.
  */
 describe('Payment links (e2e)', () => {
   let app: INestApplication<App>;
@@ -56,7 +53,7 @@ describe('Payment links (e2e)', () => {
       ).body?.data?.accessToken;
 
     expect(token).toBeDefined();
-  }, 240000);
+  }, 60000);
 
   afterAll(async () => {
     await app?.close();

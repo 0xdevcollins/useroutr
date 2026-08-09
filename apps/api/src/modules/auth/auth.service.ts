@@ -7,6 +7,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import {
+  SETTLEMENT_PROVISION_QUEUE,
+  PROVISION_WALLET_JOB,
+  PROVISION_JOB_CLEANUP,
+} from '../merchant/settlement-provision.constants';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import type { Merchant } from '@prisma/client';
@@ -61,6 +68,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly notifications: NotificationsService,
     private readonly settlement: MerchantSettlementService,
+    @InjectQueue(SETTLEMENT_PROVISION_QUEUE)
+    private readonly provisionQueue: Queue,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -86,21 +95,29 @@ export class AuthService {
       },
     });
 
-    // Auto-provision a managed Stellar settlement wallet (Approach A).
-    // Wrapped in try/catch so a Stellar / Horizon outage doesn't block
-    // registration — the dashboard surfaces a "Provision settlement"
-    // CTA the merchant can click to retry, and PR 7.9b adds the manual
-    // endpoint for that retry.
+    // Provisioning a managed Stellar settlement wallet (Approach A) makes two
+    // live Stellar round trips — funding the account, then a trustline that
+    // waits for a ledger close. Awaiting that here made every signup wait on a
+    // third party, so it runs on a queue instead and the merchant's account
+    // exists immediately.
+    //
+    // The response therefore carries no settlement address: the dashboard
+    // already renders the un-provisioned state and offers a manual retry, and
+    // the worker retries on its own before it gives up.
     try {
-      await this.settlement.provision(merchant.id);
+      await this.provisionQueue.add(
+        PROVISION_WALLET_JOB,
+        { merchantId: merchant.id, attempt: 1 },
+        PROVISION_JOB_CLEANUP,
+      );
     } catch (err) {
+      // Redis being down must not cost someone their registration. The
+      // dashboard retry is the backstop.
       this.logger.warn(
-        `Settlement provisioning failed for ${merchant.id} at register; merchant can retry from dashboard. (${err instanceof Error ? err.message : String(err)})`,
+        `Could not enqueue settlement provisioning for ${merchant.id}; merchant can retry from dashboard. (${err instanceof Error ? err.message : String(err)})`,
       );
     }
 
-    // Re-fetch so the response carries the settlement fields the provision
-    // call just wrote to the merchant row.
     const updated = await this.prisma.merchant.findUnique({
       where: { id: merchant.id },
     });
