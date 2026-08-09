@@ -22,7 +22,9 @@ describe('AppController (e2e)', () => {
     // Runs the shutdown hooks that close those connections. Without this the
     // suite passes and then hangs forever waiting on open handles.
     await app?.close();
-  });
+    // Closing shuts down queue workers and their Redis connections, which
+    // takes longer than jest's 5s default hook timeout.
+  }, 60000);
 
   it('/ (GET)', () => {
     return request(app.getHttpServer())
