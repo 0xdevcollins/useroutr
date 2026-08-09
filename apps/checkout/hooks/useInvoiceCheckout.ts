@@ -47,7 +47,7 @@ export interface InvoiceCheckoutData {
 export function useInvoiceCheckout(invoiceId: string) {
   return useQuery<InvoiceCheckoutData>({
     queryKey: ["invoice-checkout", invoiceId],
-    queryFn: () => api.get(`/v1/invoices/${invoiceId}/checkout`),
+    queryFn: () => api.get(`/invoices/${invoiceId}/checkout`),
     enabled: !!invoiceId,
     retry: false,
     staleTime: 30_000,
@@ -56,7 +56,6 @@ export function useInvoiceCheckout(invoiceId: string) {
 
 export function useInitiateInvoicePayment() {
   return useMutation<{ paymentId: string }, Error, string>({
-    mutationFn: (invoiceId) =>
-      api.post(`/v1/invoices/${invoiceId}/pay`),
+    mutationFn: (invoiceId) => api.post(`/invoices/${invoiceId}/pay`),
   });
 }

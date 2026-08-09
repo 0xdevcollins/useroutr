@@ -164,6 +164,29 @@ jobs:
         # that break soroban-env-host's testutils.
         run: cargo test --workspace --locked
 
+  # ── Test shared packages ─────────────────────────────────────────────────────
+  # Added because nothing outside apps/api and the contracts was ever run here.
+  # `@useroutr/types` now owns the API base-URL contract that the dashboard and
+  # checkout both depend on; when the two disagreed about whether
+  # NEXT_PUBLIC_API_URL included `/v1`, four features 404'd in production and no
+  # job in this file could have noticed.
+  test-packages:
+    name: Test Packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run tests
+        working-directory: packages/types
+        run: npm test
+
   # ── Build ────────────────────────────────────────────────────────────────────
   build:
     name: Build

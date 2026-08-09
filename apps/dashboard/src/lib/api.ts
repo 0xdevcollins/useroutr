@@ -1,3 +1,4 @@
+import { assertVersionlessPath, resolveApiBaseUrl } from "@useroutr/types";
 import {
   getToken,
   refreshAccessToken,
@@ -6,14 +7,16 @@ import {
 } from "./auth";
 
 /**
- * All HTTP calls hit the versioned surface (`/v1/*`). The env var points
- * at the origin only — we append the prefix here so callers can keep
- * writing `api.get("/auth/me")` and not think about versioning.
+ * All HTTP calls hit the versioned surface (`/v1/*`). `resolveApiBaseUrl` owns
+ * the prefix so callers keep writing `api.get("/auth/me")` — and so this app
+ * and checkout agree on what `NEXT_PUBLIC_API_URL` means, which they did not
+ * before. It accepts the env var with or without a trailing `/v1`.
  */
-const API_ORIGIN = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333"
-).replace(/\/$/, "");
-const BASE_URL = `${API_ORIGIN}/v1`;
+const BASE_URL = resolveApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL,
+  "http://localhost:3333",
+);
+const API_ORIGIN = BASE_URL.replace(/\/v1$/, "");
 
 function getApiConnectionErrorMessage() {
   return `Cannot reach the Useroutr API at ${API_ORIGIN}. Start it with \`npm run start:api\` or set NEXT_PUBLIC_API_URL.`;
@@ -91,6 +94,9 @@ async function request<T>(
   // pathname replacement, which would silently strip the "/v1" version
   // prefix from BASE_URL. The string-join approach is unambiguous.
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  // Fails loudly in development if a caller re-adds the version. Nineteen call
+  // sites here had, and every one of them 404'd silently in the browser.
+  assertVersionlessPath(normalizedPath);
   const url = new URL(`${BASE_URL}${normalizedPath}`);
 
   if (options.params) {
@@ -169,9 +175,9 @@ async function request<T>(
     }
 
     if (!retryRes.ok) {
-      const retryErrorBody = await parseResponse<ApiErrorBody>(
-        retryRes,
-      ).catch(() => ({}) as ApiErrorBody);
+      const retryErrorBody = await parseResponse<ApiErrorBody>(retryRes).catch(
+        () => ({}) as ApiErrorBody,
+      );
       throw new Error(
         extractErrorMessage(
           retryErrorBody,

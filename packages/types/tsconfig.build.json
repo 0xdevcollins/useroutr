@@ -11,5 +11,8 @@
     "moduleResolution": "node",
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests are source, not product — without this they compile into dist and
+  // ship to every consumer, dragging a vitest import along with them.
+  "exclude": ["src/**/*.test.ts"]
 }

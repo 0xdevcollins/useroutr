@@ -166,7 +166,7 @@ export function CardForm({
 
     try {
       const session = await api.post<CardSessionResponse>(
-        `/v1/payments/${paymentId}/card-session`
+        `/payments/${paymentId}/card-session`
       );
 
       const result = await stripe.confirmCardPayment(session.clientSecret, {

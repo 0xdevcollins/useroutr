@@ -1,15 +1,17 @@
+import { resolveApiBaseUrl } from "@useroutr/types";
+
 const TOKEN_KEY = "useroutr-token";
 const REFRESH_KEY = "useroutr-refresh-token";
 const VERIFICATION_EMAIL_KEY = "useroutr-verification-email";
 
-// Origin only (no path) — we append `/v1` ourselves so this file stays
-// in sync with lib/api.ts's BASE_URL construction. Fallback is the local
-// API port (:3333), NOT the marketing site (:3000) — getting that wrong
-// makes every refresh hit a 404 and silently log the user out.
-const API_ORIGIN = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333"
-).replace(/\/$/, "");
-const BASE_URL = `${API_ORIGIN}/v1`;
+// Shares `resolveApiBaseUrl` with lib/api.ts rather than re-deriving the base,
+// so the two cannot drift apart. Fallback is the local API port (:3333), NOT
+// the marketing site (:3000) — getting that wrong makes every refresh hit a
+// 404 and silently log the user out.
+const BASE_URL = resolveApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL,
+  "http://localhost:3333",
+);
 
 interface JwtPayload {
   exp?: number;
