@@ -45,6 +45,7 @@ import {
   type CctpObserveJobData,
 } from './cctp.constants';
 import { EscrowService } from '../escrow/escrow.service';
+import { StellarService } from '../stellar/stellar.service';
 import { ethers } from 'ethers';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFiltersDto } from './dto/payment-filters.dto';
@@ -97,10 +98,26 @@ export interface CryptoSelectResponse {
     expiresAt: string;
     expiresInSeconds: number;
   };
-  wallet: {
+  /**
+   * Which shape the payer has to sign. `evm` carries approve+burn calldata for
+   * CCTP; `stellar` carries a plain payment instruction, because a payer
+   * already on the settlement chain has nothing to bridge.
+   */
+  method: 'evm' | 'stellar';
+  /** Present when `method === 'evm'`. */
+  wallet?: {
     chainId: number;
     approve: WalletCallPayload;
     burn: WalletCallPayload;
+  };
+  /** Present when `method === 'stellar'`. */
+  stellar?: {
+    destination: string;
+    asset: { code: string; issuer: string };
+    amount: string;
+    /** Ties the on-chain payment back to this payment when we verify it. */
+    memo: string;
+    networkPassphrase: string;
   };
 }
 
@@ -162,6 +179,7 @@ export class PaymentsService implements OnModuleInit {
     @InjectQueue(CCTP_OBSERVE_QUEUE) private readonly cctpQueue: Queue,
     @InjectQueue(SETTLEMENT_HOLD_QUEUE) private readonly holdQueue: Queue,
     private readonly escrowService: EscrowService,
+    private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
   ) {
@@ -724,6 +742,39 @@ export class PaymentsService implements OnModuleInit {
    * in QUOTE_LOCKED, returns the existing quote and rebuilds the wallet
    * payload (the on-chain calldata is deterministic for the same args).
    */
+  /** The quote block, shared by both payment shapes so they cannot drift. */
+  private quoteView(quote: {
+    id: string;
+    fromAmount: { toString(): string };
+    fromAsset: string;
+    fromChain: string;
+    toAmount: { toString(): string };
+    toAsset: string;
+    toChain: string;
+    rate: { toString(): string };
+    feeAmount: { toString(): string };
+    feeBps: number;
+    expiresAt: Date;
+  }): CryptoSelectResponse['quote'] {
+    return {
+      id: quote.id,
+      fromAmount: quote.fromAmount.toString(),
+      fromAsset: quote.fromAsset,
+      fromChain: quote.fromChain,
+      toAmount: quote.toAmount.toString(),
+      toAsset: quote.toAsset,
+      toChain: quote.toChain,
+      rate: quote.rate.toString(),
+      fee: quote.feeAmount.toString(),
+      feeBps: quote.feeBps,
+      expiresAt: quote.expiresAt.toISOString(),
+      expiresInSeconds: Math.max(
+        0,
+        Math.floor((quote.expiresAt.getTime() - Date.now()) / 1000),
+      ),
+    };
+  }
+
   async selectCrypto(
     paymentId: string,
     sourceChain: string,
@@ -736,11 +787,6 @@ export class PaymentsService implements OnModuleInit {
     if (!source || !source.enabled) {
       throw new BadRequestException(
         `Source chain ${sourceChain} is not enabled for CCTP V2`,
-      );
-    }
-    if (source.kind !== 'evm') {
-      throw new BadRequestException(
-        `Only EVM source chains are supported in v1; got ${source.kind}`,
       );
     }
 
@@ -817,6 +863,38 @@ export class PaymentsService implements OnModuleInit {
       quote = existingQuote!;
     }
 
+    // A payer already holding USDC on Stellar has nothing to bridge: no burn,
+    // no attestation, no Forwarder. They send a payment to the merchant's
+    // settlement address and it settles in one ledger close. Building CCTP
+    // calldata for them would be a round trip off the settlement chain and
+    // back, which is the slowest and most expensive route to the same place.
+    if (source.kind === 'stellar') {
+      const network = this.configService.get<string>('STELLAR_NETWORK');
+      const isMainnet = network?.toLowerCase() === 'mainnet';
+
+      return {
+        quote: this.quoteView(quote),
+        method: 'stellar',
+        stellar: {
+          destination: recipient,
+          asset: {
+            code: 'USDC',
+            issuer: isMainnet
+              ? 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+              : 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+          },
+          amount: quote.fromAmount.toString(),
+          // MEMO_TEXT caps at 28 bytes; payment ids are cuids and fit. The
+          // memo is a reconciliation aid, not the authority — verification
+          // checks destination, asset and amount against the ledger.
+          memo: payment.id.slice(0, 28),
+          networkPassphrase: isMainnet
+            ? 'Public Global Stellar Network ; September 2015'
+            : 'Test SDF Network ; September 2015',
+        },
+      };
+    }
+
     // Build the wallet payload. CctpService handles burn calldata + hook
     // data; approve is a one-liner ERC-20.
     const env = cctpEnvFromStellarNetwork(
@@ -845,23 +923,8 @@ export class PaymentsService implements OnModuleInit {
     }
 
     return {
-      quote: {
-        id: quote.id,
-        fromAmount: quote.fromAmount.toString(),
-        fromAsset: quote.fromAsset,
-        fromChain: quote.fromChain,
-        toAmount: quote.toAmount.toString(),
-        toAsset: quote.toAsset,
-        toChain: quote.toChain,
-        rate: quote.rate.toString(),
-        fee: quote.feeAmount.toString(),
-        feeBps: quote.feeBps,
-        expiresAt: quote.expiresAt.toISOString(),
-        expiresInSeconds: Math.max(
-          0,
-          Math.floor((quote.expiresAt.getTime() - Date.now()) / 1000),
-        ),
-      },
+      quote: this.quoteView(quote),
+      method: 'evm',
       wallet: {
         chainId: this.chainIdForEvmDomain(source),
         approve: {
@@ -892,6 +955,87 @@ export class PaymentsService implements OnModuleInit {
    * hash is rejected — that suggests a double-burn, which is rare and
    * the customer should contact support.
    */
+  /**
+   * Confirm a Stellar-native payment by verifying it on the ledger.
+   *
+   * The client tells us *where to look*, never what happened. Everything that
+   * matters — destination, asset, amount, success — is read back from Horizon,
+   * so a caller who invents a hash, points at someone else's transaction, or
+   * underpays gets rejected rather than believed. The memo is not consulted
+   * for authorization: it is a convenience for humans reconciling later, and
+   * it is as attacker-supplied as the hash itself.
+   */
+  async submitStellarPayment(
+    paymentId: string,
+    txHash: string,
+  ): Promise<{ status: PaymentStatus; stellarTxHash: string }> {
+    this.logger.log(`Stellar payment submitted for ${paymentId} tx=${txHash}`);
+
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { merchant: true },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    // Idempotency: the same hash on an already-settled payment is a retry,
+    // not a problem. Checkout retries this on reconnect.
+    if (
+      payment.status === PaymentStatus.COMPLETED &&
+      payment.stellarTxHash === txHash
+    ) {
+      return { status: payment.status, stellarTxHash: txHash };
+    }
+
+    if (
+      payment.status !== PaymentStatus.PENDING &&
+      payment.status !== PaymentStatus.QUOTE_LOCKED
+    ) {
+      throw new ConflictException(
+        `Payment is in status ${payment.status}; cannot accept a Stellar payment`,
+      );
+    }
+
+    // One ledger transaction settles at most one payment. Without this, the
+    // same transfer could be presented against every open payment a merchant
+    // has and settle all of them.
+    const alreadyUsed = await this.prisma.payment.findFirst({
+      where: { stellarTxHash: txHash, NOT: { id: paymentId } },
+      select: { id: true },
+    });
+    if (alreadyUsed) {
+      throw new ConflictException(
+        'This Stellar transaction has already been applied to another payment.',
+      );
+    }
+
+    const expectedDestination = payment.merchant.settlementAddress ?? '';
+    const expectedAmount = payment.destAmount ?? payment.sourceAmount;
+    if (!expectedDestination || !expectedAmount) {
+      throw new BadRequestException(
+        'Payment is not ready to accept a Stellar transfer',
+      );
+    }
+
+    const verified = await this.stellarService.verifyIncomingPayment({
+      txHash,
+      destination: expectedDestination,
+      minAmount: expectedAmount.toString(),
+      assetCode: 'USDC',
+    });
+    if (!verified.ok) {
+      throw new BadRequestException(
+        `Stellar payment could not be verified: ${verified.reason}`,
+      );
+    }
+
+    await this.updateStatus(paymentId, PaymentStatus.COMPLETED, {
+      stellarTxHash: txHash,
+      destTxHash: txHash,
+    });
+
+    return { status: PaymentStatus.COMPLETED, stellarTxHash: txHash };
+  }
+
   async submitBurn(
     paymentId: string,
     sourceTxHash: string,

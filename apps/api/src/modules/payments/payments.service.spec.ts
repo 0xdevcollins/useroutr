@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events/events.service';
 import { QuotesService } from '../quotes/quotes.service';
+import { StellarService } from '../stellar/stellar.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { LinksService } from '../links/links.service';
 import { CctpService } from '../cctp/cctp.service';
@@ -48,6 +50,7 @@ describe('PaymentsService', () => {
       updateMany: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
       // createFromLink wires both — `create` lands the row, `delete` is the
       // best-effort rollback if `markUsed` loses the single-use race.
@@ -61,6 +64,9 @@ describe('PaymentsService', () => {
       create: jest.fn(),
     },
     merchant: {
+      findUnique: jest.fn(),
+    },
+    quote: {
       findUnique: jest.fn(),
     },
     merchantBalance: {
@@ -80,6 +86,11 @@ describe('PaymentsService', () => {
 
   const quotesService = {
     validateAndConsume: jest.fn(),
+    createQuote: jest.fn(),
+  };
+
+  const stellarService = {
+    verifyIncomingPayment: jest.fn(),
   };
 
   const webhooksService = {
@@ -162,6 +173,7 @@ describe('PaymentsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: EventsService, useValue: eventsService },
         { provide: QuotesService, useValue: quotesService },
+        { provide: StellarService, useValue: stellarService },
         { provide: WebhooksService, useValue: webhooksService },
         { provide: LinksService, useValue: linksService },
         { provide: CctpService, useValue: cctpService },
@@ -176,6 +188,7 @@ describe('PaymentsService', () => {
           provide: NotificationsService,
           useValue: {
             notifyPaymentCompleted: jest.fn(),
+            notifyPaymentReceived: jest.fn().mockResolvedValue(undefined),
             sendPaymentReceipt: jest.fn(),
             sendPaymentNotification: jest.fn(),
           },
@@ -327,6 +340,174 @@ describe('PaymentsService', () => {
 
       expect(count).toBe(2);
       expect(holdQueue.add).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('selectCrypto — Stellar-native source', () => {
+    const merchantWithWallet = {
+      ...paymentRecord,
+      destAmount: new Prisma.Decimal(50),
+      merchant: {
+        id: 'merchant_123',
+        settlementAddress:
+          'GBBN5WUDNH5P7ZG3CKJIWZ6CXQY2PXL23H2K36QIE53UGAXWZDWJP3D7',
+      },
+      quote: null,
+    };
+
+    beforeEach(() => {
+      prisma.payment.findUnique.mockResolvedValue(merchantWithWallet);
+      prisma.quote.findUnique.mockResolvedValue({
+        id: 'qt_1',
+        fromAmount: new Prisma.Decimal(50),
+        fromAsset: 'USDC',
+        fromChain: 'stellar',
+        toAmount: new Prisma.Decimal(50),
+        toAsset: 'USDC',
+        toChain: 'stellar',
+        rate: new Prisma.Decimal(1),
+        feeAmount: new Prisma.Decimal(0.25),
+        feeBps: 50,
+        expiresAt: new Date(Date.now() + 30_000),
+      });
+      quotesService.createQuote.mockResolvedValue({ id: 'qt_1' });
+    });
+
+    it('no longer rejects a Stellar source', async () => {
+      // This is the whole point: a payer already holding USDC on Stellar used
+      // to be told to go away and bridge.
+      await expect(service.selectCrypto('pay_123', 'stellar')).resolves.toEqual(
+        expect.objectContaining({ method: 'stellar' }),
+      );
+    });
+
+    it('returns a payment instruction rather than burn calldata', async () => {
+      const res = await service.selectCrypto('pay_123', 'stellar');
+
+      expect(res.wallet).toBeUndefined();
+      expect(res.stellar).toEqual(
+        expect.objectContaining({
+          destination: merchantWithWallet.merchant.settlementAddress,
+          amount: '50',
+          asset: expect.objectContaining({ code: 'USDC' }),
+        }),
+      );
+    });
+
+    it('memo fits MEMO_TEXT and ties back to the payment', async () => {
+      const res = await service.selectCrypto('pay_123', 'stellar');
+
+      expect(res.stellar?.memo).toBe('pay_123');
+      expect(Buffer.byteLength(res.stellar!.memo, 'utf8')).toBeLessThanOrEqual(
+        28,
+      );
+    });
+
+    it('uses the testnet USDC issuer and passphrase off mainnet', async () => {
+      const res = await service.selectCrypto('pay_123', 'stellar');
+
+      expect(res.stellar?.asset.issuer).toBe(
+        'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      );
+      expect(res.stellar?.networkPassphrase).toContain('Test SDF Network');
+    });
+
+    it('still refuses a merchant with no settlement address', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...merchantWithWallet,
+        merchant: { id: 'merchant_123', settlementAddress: null },
+      });
+
+      await expect(service.selectCrypto('pay_123', 'stellar')).rejects.toThrow(
+        /settlement address/i,
+      );
+    });
+  });
+
+  describe('submitStellarPayment', () => {
+    const HASH = 'a'.repeat(64);
+    const settled = {
+      ...paymentRecord,
+      status: 'QUOTE_LOCKED',
+      destAmount: new Prisma.Decimal(50),
+      stellarTxHash: null,
+      merchant: {
+        id: 'merchant_123',
+        settlementAddress:
+          'GBBN5WUDNH5P7ZG3CKJIWZ6CXQY2PXL23H2K36QIE53UGAXWZDWJP3D7',
+      },
+    };
+
+    beforeEach(() => {
+      prisma.payment.findUnique.mockResolvedValue(settled);
+      prisma.payment.findFirst.mockResolvedValue(null);
+      stellarService.verifyIncomingPayment.mockResolvedValue({ ok: true });
+    });
+
+    it('completes the payment when the ledger confirms it', async () => {
+      const res = await service.submitStellarPayment('pay_123', HASH);
+
+      expect(res.status).toBe('COMPLETED');
+      expect(stellarService.verifyIncomingPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          txHash: HASH,
+          destination: settled.merchant.settlementAddress,
+          minAmount: '50',
+          assetCode: 'USDC',
+        }),
+      );
+    });
+
+    it('refuses a transaction the ledger does not back', async () => {
+      // The client says where to look; it does not get to say what happened.
+      stellarService.verifyIncomingPayment.mockResolvedValue({
+        ok: false,
+        reason: 'transaction not found on the ledger',
+      });
+
+      await expect(
+        service.submitStellarPayment('pay_123', HASH),
+      ).rejects.toThrow(/could not be verified/);
+      expect(prisma.payment.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED' }),
+        }),
+      );
+    });
+
+    it('refuses a transaction already applied to another payment', async () => {
+      // Without this, one transfer could be presented against every open
+      // payment a merchant has and settle all of them.
+      prisma.payment.findFirst.mockResolvedValue({ id: 'pay_other' });
+
+      await expect(
+        service.submitStellarPayment('pay_123', HASH),
+      ).rejects.toThrow(/already been applied/);
+      expect(stellarService.verifyIncomingPayment).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent for a retry of the same hash', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...settled,
+        status: 'COMPLETED',
+        stellarTxHash: HASH,
+      });
+
+      const res = await service.submitStellarPayment('pay_123', HASH);
+
+      expect(res.status).toBe('COMPLETED');
+      expect(stellarService.verifyIncomingPayment).not.toHaveBeenCalled();
+    });
+
+    it('refuses a payment that is not awaiting funds', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...settled,
+        status: 'REFUNDED',
+      });
+
+      await expect(
+        service.submitStellarPayment('pay_123', HASH),
+      ).rejects.toThrow(/cannot accept a Stellar payment/);
     });
   });
 

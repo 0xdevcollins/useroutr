@@ -208,6 +208,21 @@ export class CheckoutPaymentsController {
     return this.paymentsService.submitBurn(paymentId, body.sourceTxHash);
   }
 
+  /**
+   * Confirm a Stellar-native payment. The body carries only the tx hash —
+   * where to look. What happened is read back from the ledger.
+   */
+  @Post('checkout/:paymentId/stellar-submitted')
+  stellarSubmitted(
+    @Param('paymentId') paymentId: string,
+    @Body() body: { txHash: string },
+  ) {
+    if (!body?.txHash || !/^[0-9a-fA-F]{64}$/.test(body.txHash)) {
+      throw new BadRequestException('txHash must be a 64-character hex string');
+    }
+    return this.paymentsService.submitStellarPayment(paymentId, body.txHash);
+  }
+
   @Get('checkout/:paymentId/crypto-status')
   cryptoStatus(@Param('paymentId') paymentId: string) {
     return this.paymentsService.getCryptoStatus(paymentId);

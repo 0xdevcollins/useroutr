@@ -282,6 +282,87 @@ export class StellarService {
     return { merchantAmount, feeAmount };
   }
 
+  /**
+   * Verify that a transaction on the ledger really paid us what a client
+   * claims it did.
+   *
+   * The client supplies only the hash — where to look. Success, destination,
+   * asset and amount all come from Horizon, so an invented hash, a pointer at
+   * an unrelated transaction, or an underpayment are all rejected rather than
+   * taken on trust.
+   */
+  async verifyIncomingPayment(params: {
+    txHash: string;
+    destination: string;
+    minAmount: string;
+    assetCode: string;
+  }): Promise<{ ok: true } | { ok: false; reason: string }> {
+    let operations: StellarSdk.Horizon.ServerApi.OperationRecord[];
+    try {
+      const tx = await this.horizonServer
+        .transactions()
+        .transaction(params.txHash)
+        .call();
+
+      // A transaction can be included in a ledger and still have failed.
+      if (!tx.successful) {
+        return { ok: false, reason: 'transaction failed on-chain' };
+      }
+
+      const ops = await this.horizonServer
+        .operations()
+        .forTransaction(params.txHash)
+        .limit(200)
+        .call();
+      operations = ops.records;
+    } catch {
+      // Covers both "no such transaction" and Horizon being unreachable. We
+      // cannot tell them apart from the client's side, and treating an
+      // unverifiable payment as unverified is the safe direction.
+      return { ok: false, reason: 'transaction not found on the ledger' };
+    }
+
+    const required = Number(params.minAmount);
+
+    // Sum every payment leg to this destination in the transaction: a wallet
+    // may legitimately split one transfer across operations, and requiring a
+    // single matching op would reject a valid payment.
+    // Horizon types `op.type` as an enum, so it is widened to a string once
+    // rather than compared against literals eight times.
+    type PaymentLeg = {
+      type: string;
+      to?: string;
+      asset_code?: string;
+      amount?: string;
+    };
+    const PAID_TYPES = ['payment', 'path_payment_strict_receive'];
+
+    const paid = (operations as unknown as PaymentLeg[])
+      .filter(
+        (op) =>
+          PAID_TYPES.includes(String(op.type)) &&
+          op.to === params.destination &&
+          op.asset_code === params.assetCode,
+      )
+      .reduce((sum, op) => sum + Number(op.amount ?? 0), 0);
+
+    if (paid <= 0) {
+      return {
+        ok: false,
+        reason: `no ${params.assetCode} payment to ${params.destination} in this transaction`,
+      };
+    }
+    // Tolerate a rounding hair below the expected amount, not a real shortfall.
+    if (paid + 1e-7 < required) {
+      return {
+        ok: false,
+        reason: `paid ${paid} ${params.assetCode}, expected at least ${required}`,
+      };
+    }
+
+    return { ok: true };
+  }
+
   // ── Private helpers ────────────────────────────────────────────────────────
 
   private requireKeypair(sourceSecret?: string): StellarSdk.Keypair {
