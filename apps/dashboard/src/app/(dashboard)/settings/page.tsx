@@ -8,6 +8,7 @@ import {
   useProvisionSettlement,
 } from "@/hooks/useSettings";
 import { useToastNotificationPreference } from "@/hooks/useToastNotificationPreference";
+import { WithdrawModal } from "@/components/settings/WithdrawModal";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -19,6 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Radio,
+  ArrowUpRight,
 } from "lucide-react";
 
 const fadeUp = {
@@ -40,6 +42,7 @@ export default function SettingsPage() {
     setEnabled: setRealtimeNotificationsEnabled,
   } = useToastNotificationPreference();
   const provisionSettlement = useProvisionSettlement();
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
 
   const [name, setName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -203,6 +206,14 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
+            <Button
+              variant="outline"
+              onClick={() => setWithdrawOpen(true)}
+              className="w-full"
+            >
+              <ArrowUpRight size={15} className="mr-2" />
+              Withdraw USDC
+            </Button>
           </div>
         ) : (
           // ── Not yet provisioned ───────────────────────────────────
@@ -342,6 +353,13 @@ export default function SettingsPage() {
           ))}
         </div>
       </motion.div>
+
+      <WithdrawModal
+        open={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+        onSuccess={(message) => toast(message, "success")}
+        onError={(message) => toast(message, "error")}
+      />
     </div>
   );
 }

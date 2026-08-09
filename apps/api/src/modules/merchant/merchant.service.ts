@@ -82,6 +82,12 @@ export class MerchantService {
         ...(dto.settlementChain !== undefined && {
           settlementChain: dto.settlementChain,
         }),
+        ...(dto.settlementHoldEnabled !== undefined && {
+          settlementHoldEnabled: dto.settlementHoldEnabled,
+        }),
+        ...(dto.settlementHoldSeconds !== undefined && {
+          settlementHoldSeconds: dto.settlementHoldSeconds,
+        }),
       },
     });
 
