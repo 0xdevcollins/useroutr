@@ -45,7 +45,7 @@ export function useAnalytics() {
   const query = useQuery<AnalyticsOverview>({
     queryKey: ["analytics-overview", period],
     queryFn: () =>
-      api.get<AnalyticsOverview>("/v1/analytics/overview", {
+      api.get<AnalyticsOverview>("/analytics/overview", {
         params: { period },
       }),
     staleTime: 60_000, // re-fetch after 1 min

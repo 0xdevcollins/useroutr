@@ -99,7 +99,7 @@ export function useInvoices(params: InvoicesParams = {}) {
   return useQuery<PaginatedInvoices>({
     queryKey: ["invoices", params],
     queryFn: () =>
-      api.get<PaginatedInvoices>("/v1/invoices", {
+      api.get<PaginatedInvoices>("/invoices", {
         params: params as Record<string, unknown>,
       }),
   });
@@ -108,7 +108,7 @@ export function useInvoices(params: InvoicesParams = {}) {
 export function useInvoice(id: string) {
   return useQuery<Invoice>({
     queryKey: ["invoice", id],
-    queryFn: () => api.get<Invoice>(`/v1/invoices/${id}`),
+    queryFn: () => api.get<Invoice>(`/invoices/${id}`),
     enabled: !!id,
   });
 }
@@ -117,7 +117,7 @@ export function useCreateInvoice() {
   const queryClient = useQueryClient();
 
   return useMutation<Invoice, Error, CreateInvoiceInput>({
-    mutationFn: (body) => api.post<Invoice>("/v1/invoices", body),
+    mutationFn: (body) => api.post<Invoice>("/invoices", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },
@@ -128,7 +128,8 @@ export function useUpdateInvoice() {
   const queryClient = useQueryClient();
 
   return useMutation<Invoice, Error, { id: string; body: UpdateInvoiceInput }>({
-    mutationFn: ({ id, body }) => api.patch<Invoice>(`/v1/invoices/${id}`, body),
+    mutationFn: ({ id, body }) =>
+      api.patch<Invoice>(`/invoices/${id}`, body),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.setQueryData(["invoice", data.id], data);
@@ -140,7 +141,7 @@ export function useDeleteInvoice() {
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, string>({
-    mutationFn: (id) => api.delete(`/v1/invoices/${id}`),
+    mutationFn: (id) => api.delete(`/invoices/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },
@@ -152,7 +153,7 @@ export function useSendInvoice() {
 
   return useMutation<Invoice, Error, { id: string; message?: string }>({
     mutationFn: ({ id, message }) =>
-      api.post<Invoice>(`/v1/invoices/${id}/send`, { message }),
+      api.post<Invoice>(`/invoices/${id}/send`, { message }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
       queryClient.setQueryData(["invoice", data.id], data);
@@ -164,7 +165,7 @@ export function useCancelInvoice() {
   const queryClient = useQueryClient();
 
   return useMutation<Invoice, Error, string>({
-    mutationFn: (id) => api.post<Invoice>(`/v1/invoices/${id}/cancel`, {}),
+    mutationFn: (id) => api.post<Invoice>(`/invoices/${id}/cancel`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },
@@ -173,7 +174,7 @@ export function useCancelInvoice() {
 
 export function useInvoicePdfUrl() {
   return useMutation<{ url: string }, Error, string>({
-    mutationFn: (id) => api.get<{ url: string }>(`/v1/invoices/${id}/pdf`),
+    mutationFn: (id) => api.get<{ url: string }>(`/invoices/${id}/pdf`),
   });
 }
 
@@ -181,7 +182,7 @@ export function useInvoicePdfUrl() {
 export function useInvoicePdf(id: string | undefined) {
   return useQuery<{ url: string }>({
     queryKey: ["invoice-pdf", id],
-    queryFn: () => api.get<{ url: string }>(`/v1/invoices/${id}/pdf`),
+    queryFn: () => api.get<{ url: string }>(`/invoices/${id}/pdf`),
     enabled: !!id,
     staleTime: 5 * 60 * 1000, // 5 min — PDF URLs are stable
   });

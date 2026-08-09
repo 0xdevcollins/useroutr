@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { configureApp } from './../src/configure-app';
 
 /**
  * Payment-link lifecycle against a real database — the automatable core of
@@ -34,7 +35,7 @@ describe('Payment links (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('v1', { exclude: ['healthz', 'readyz', '/'] });
+    configureApp(app);
     await app.init();
 
     const registered = await request(app.getHttpServer())

@@ -137,7 +137,7 @@ export function NotificationsProvider({
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const response = await api.get<NotificationsResponse>("/v1/notifications", {
+      const response = await api.get<NotificationsResponse>("/notifications", {
         params: { limit: 50 },
       });
 
@@ -198,7 +198,7 @@ export function NotificationsProvider({
     setUnreadCount((prev) => Math.max(0, prev - 1));
 
     try {
-      await api.patch(`/v1/notifications/${id}/read`);
+      await api.patch(`/notifications/${id}/read`);
     } catch {
       setNotifications((prev) =>
         prev.map((item) => (item.id === id ? { ...item, read: false } : item)),
@@ -215,7 +215,7 @@ export function NotificationsProvider({
     setUnreadCount(0);
 
     try {
-      await api.post("/v1/notifications/mark-all-read");
+      await api.post("/notifications/mark-all-read");
     } catch {
       setNotifications(previousNotifications);
       setUnreadCount(previousUnreadCount);

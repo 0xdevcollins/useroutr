@@ -4,9 +4,7 @@ import { Logger } from '@nestjs/common';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
-import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { configureApp } from './configure-app';
 import {
   EnvValidationError,
   validateEnvironmentConfig,
@@ -74,21 +72,9 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // ── Global pipes / filters / interceptors ───────────────────────────────────
-  app.useGlobalFilters(new GlobalExceptionFilter());
-  app.useGlobalInterceptors(
-    new TransformInterceptor(),
-    new LoggingInterceptor(),
-  );
-
-  // ── URL versioning ──────────────────────────────────────────────────────────
-  // Every controller is mounted under /v1/* so integrators can pin a version
-  // and we can cut a clean /v2 later. Health endpoints are deliberately
-  // excluded — external monitors (Better Stack, k8s probes, ELB) shouldn't
-  // have to track API version cuts.
-  app.setGlobalPrefix('v1', {
-    exclude: ['healthz', 'readyz', '/'],
-  });
+  // ── Pipes / filters / interceptors / versioning ─────────────────────────────
+  // Shared with the e2e suite so both run the same request pipeline.
+  configureApp(app);
 
   // Without this, SIGTERM kills the process outright: Node's default handler
   // exits before Nest runs a single shutdown hook. The process does stop — but

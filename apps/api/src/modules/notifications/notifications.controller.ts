@@ -13,7 +13,12 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentMerchant } from '../merchant/decorators/current-merchant.decorator';
 import { NotificationsService } from './notifications.service';
 
-@Controller('v1/notifications')
+// Not `'v1/notifications'`: `setGlobalPrefix('v1')` already supplies that, and
+// spelling it again mounted this controller at `/v1/v1/notifications` — the one
+// route in the API whose path did not match its own documentation. The
+// dashboard had compensated by hardcoding the doubled prefix, so nothing looked
+// broken from the inside.
+@Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}

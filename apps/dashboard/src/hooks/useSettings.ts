@@ -237,7 +237,7 @@ export function useRemoveTeamMember() {
 export function useWebhookConfig() {
   return useQuery<WebhookConfig>({
     queryKey: ["webhook-config"],
-    queryFn: () => api.get("/v1/webhooks"),
+    queryFn: () => api.get("/webhooks"),
   });
 }
 
@@ -245,7 +245,7 @@ export function useRegisterWebhook() {
   const queryClient = useQueryClient();
 
   return useMutation<WebhookConfig, Error, { webhookUrl: string; subscribedEvents: string[] }>({
-    mutationFn: (body) => api.post("/v1/webhooks", body),
+    mutationFn: (body) => api.post("/webhooks", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhook-config"] });
     },
@@ -260,7 +260,7 @@ export function useUpdateWebhook() {
     Error,
     { webhookUrl?: string; subscribedEvents?: string[] }
   >({
-    mutationFn: (body) => api.patch("/v1/webhooks", body),
+    mutationFn: (body) => api.patch("/webhooks", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhook-config"] });
     },
@@ -271,7 +271,7 @@ export function useWebhookLogs(filters: WebhookLogFilters = {}) {
   return useQuery<WebhookLogsResponse>({
     queryKey: ["webhook-logs", filters],
     queryFn: () =>
-      api.get("/v1/webhooks/logs", {
+      api.get("/webhooks/logs", {
         params: filters as Record<string, unknown>,
       }),
   });
@@ -281,7 +281,7 @@ export function useRetryWebhookDelivery() {
   const queryClient = useQueryClient();
 
   return useMutation<{ success: boolean; message: string }, Error, string>({
-    mutationFn: (id) => api.post(`/v1/webhooks/logs/${id}/retry`),
+    mutationFn: (id) => api.post(`/webhooks/logs/${id}/retry`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["webhook-logs"] });
     },
