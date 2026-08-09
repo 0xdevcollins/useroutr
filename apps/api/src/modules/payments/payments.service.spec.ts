@@ -9,6 +9,7 @@ import { StellarService } from '../stellar/stellar.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { LinksService } from '../links/links.service';
 import { CctpService } from '../cctp/cctp.service';
+import { BurnFeeService } from '../cctp/burn-fee.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EscrowService } from '../escrow/escrow.service';
 
@@ -112,6 +113,19 @@ describe('PaymentsService', () => {
     prepareBurn: jest.fn(),
   };
 
+  // Circle's fee lookup. Defaults to the real Ethereum → Stellar answer (1 bp)
+  // so selectCrypto takes the Fast Transfer path these tests describe; a test
+  // that wants the standard-finality fallback can resolve null instead.
+  const burnFeeService = {
+    minimumFeeBps: jest.fn().mockResolvedValue(1),
+    maxFeeFor: jest.fn((amount: bigint, bps: number) => {
+      if (bps <= 0) return 0n;
+      const n = amount * BigInt(bps);
+      const r = n / 10_000n + (n % 10_000n ? 1n : 0n);
+      return r > 0n ? r : 1n;
+    }),
+  };
+
   // BullMQ queue double — submitBurn enqueues a cctp.observe job after
   // recording the source tx hash. Tests assert the call was made; the
   // worker itself is exercised by its own spec.
@@ -183,6 +197,7 @@ describe('PaymentsService', () => {
         { provide: WebhooksService, useValue: webhooksService },
         { provide: LinksService, useValue: linksService },
         { provide: CctpService, useValue: cctpService },
+        { provide: BurnFeeService, useValue: burnFeeService },
         // BullMQ uses a stringly-typed token (`getQueueToken(name)`) for
         // queue injection. We replicate it here without pulling the BullMQ
         // helper into the test — keeps the test surface tiny.
@@ -346,6 +361,74 @@ describe('PaymentsService', () => {
 
       expect(count).toBe(2);
       expect(holdQueue.add).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('selectCrypto — EVM source, Fast Transfer fee', () => {
+    const evmPayment = {
+      ...paymentRecord,
+      destAmount: new Prisma.Decimal('0.01'),
+      merchant: {
+        id: 'merchant_123',
+        settlementAddress:
+          'GBBN5WUDNH5P7ZG3CKJIWZ6CXQY2PXL23H2K36QIE53UGAXWZDWJP3D7',
+      },
+      quote: null,
+    };
+
+    beforeEach(() => {
+      prisma.payment.findUnique.mockResolvedValue(evmPayment);
+      prisma.quote.findUnique.mockResolvedValue({
+        id: 'qt_1',
+        fromAmount: new Prisma.Decimal('0.01'),
+        fromAsset: 'USDC',
+        fromChain: 'ethereum',
+        toAmount: new Prisma.Decimal('0.01'),
+        toAsset: 'USDC',
+        toChain: 'stellar',
+        rate: new Prisma.Decimal(1),
+        feeAmount: new Prisma.Decimal(0),
+        feeBps: 50,
+        expiresAt: new Date(Date.now() + 600_000),
+      });
+      quotesService.createQuote.mockResolvedValue({ id: 'qt_1' });
+      cctpService.prepareBurn.mockResolvedValue({
+        to: '0xTokenMessenger',
+        data: '0xdeadbeef',
+        value: '0x0',
+        description: 'burn',
+      });
+    });
+
+    // Circle does not reject a Fast Transfer that offers maxFee 0 — it accepts
+    // the burn and quietly waits for hard finality, reporting
+    // `delayReason: insufficient_fee`. So the burn must carry a real fee, or
+    // the checkout's "8–20 seconds" is a lie every single time.
+    it('pays the fee Circle asks for rather than offering zero', async () => {
+      await service.selectCrypto('pay_123', 'ethereum');
+
+      const [req] = cctpService.prepareBurn.mock.calls.at(-1) as [
+        { speed: string; maxFee: bigint },
+      ];
+      expect(req.speed).toBe('fast');
+      // 0.01 USDC = 10_000 subunits; 1 bp of that is exactly 1.
+      expect(req.maxFee).toBe(1n);
+      expect(req.maxFee).not.toBe(0n);
+    });
+
+    // Sending a fast burn we know will be demoted would mean the status page
+    // promises seconds and delivers a quarter of an hour. Standard finality is
+    // slower but it is the truth.
+    it('drops to standard finality when the fee cannot be looked up', async () => {
+      burnFeeService.minimumFeeBps.mockResolvedValueOnce(null);
+
+      await service.selectCrypto('pay_123', 'ethereum');
+
+      const [req] = cctpService.prepareBurn.mock.calls.at(-1) as [
+        { speed: string; maxFee: bigint },
+      ];
+      expect(req.speed).toBe('standard');
+      expect(req.maxFee).toBe(0n);
     });
   });
 
