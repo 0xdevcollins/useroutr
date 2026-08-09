@@ -68,6 +68,31 @@ describe('Request validation (e2e)', () => {
     await patch({ settlementAsset: 'NOTANASSET' }).expect(400);
   });
 
+  // Regression: installing the global pipe made `@IsNumber()` run against
+  // query strings for the first time, and `?limit=2` — a string at that point —
+  // started coming back 400. Every paginated list endpoint was affected. The
+  // fix is `@Type(() => Number)` on the query DTO, so these cases pin both
+  // halves: numbers get through, rubbish still does not.
+  describe('numeric query parameters', () => {
+    const list = (query: string) =>
+      request(app.getHttpServer())
+        .get(`/v1/payments${query}`)
+        .set('Authorization', `Bearer ${token}`);
+
+    it('accepts a numeric limit and page from the query string', async () => {
+      await list('?limit=2').expect(200);
+      await list('?limit=2&page=1').expect(200);
+    });
+
+    it('still rejects a limit that is not a number', async () => {
+      await list('?limit=abc').expect(400);
+    });
+
+    it('still rejects a status outside the supported set', async () => {
+      await list('?status=NOPE').expect(400);
+    });
+  });
+
   it('rejects a settlement chain that is not supported', async () => {
     await patch({ settlementChain: 'dogecoin' }).expect(400);
   });
