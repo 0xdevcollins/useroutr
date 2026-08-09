@@ -3,18 +3,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@useroutr/ui';
 import { Plus } from 'lucide-react';
+import type { PayoutListResponse } from '@useroutr/types';
 import { RecipientsTable } from '@/components/recipients/RecipientsTable';
 import { CreatePayoutDialog } from '@/components/payouts/CreatePayoutDialog';
 import { PayoutsTable } from '@/components/payouts/PayoutsTable';
+import { api } from '@/lib/api';
 
 export default function PayoutsPage() {
   const payoutsQuery = useQuery({
     queryKey: ['payouts'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/payouts');
-      if (!res.ok) throw new Error('Failed to fetch payouts');
-      return res.json();
-    },
+    queryFn: () => api.get<PayoutListResponse>('/payouts'),
   });
 
   return (

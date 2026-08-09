@@ -9,6 +9,7 @@ import {
   DownloadSimple,
   Info,
 } from "@phosphor-icons/react";
+import { api } from "@/lib/api";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type Period = "7d" | "30d" | "90d" | "1y";
@@ -117,10 +118,6 @@ const PAYMENT_COLORS: Record<PaymentMethod, string> = {
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-function getApiBaseUrl() {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
-}
 
 function formatMoney(value: number, currency = "USD") {
   return formatCurrency(value, currency);
@@ -414,17 +411,6 @@ function normalizeLiveSnapshot(
   };
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const base = getApiBaseUrl();
-  const response = await fetch(`${base}${path}`, { cache: "no-store" });
-
-  if (!response.ok) {
-    throw new Error(`${path} failed with ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 async function loadSnapshot(period: Period, range: DateRange) {
   const hasCustomRange = Boolean(range.start && range.end);
   const { bucket } = getBucketDates(period, range);
@@ -441,10 +427,10 @@ async function loadSnapshot(period: Period, range: DateRange) {
   const baseQuery = query.toString();
   const [revenueResult, paymentsResult, failuresResult, currenciesResult] =
     await Promise.allSettled([
-      fetchJson<RevenueResponse>(`/v1/analytics/revenue?${baseQuery}`),
-      fetchJson<PaymentsResponse>(`/v1/analytics/payments?${baseQuery}`),
-      fetchJson<FailuresResponse>(`/v1/analytics/failures?${baseQuery}`),
-      fetchJson<CurrenciesResponse>(`/v1/analytics/currencies?${baseQuery}`),
+      api.get<RevenueResponse>(`/analytics/revenue?${baseQuery}`),
+      api.get<PaymentsResponse>(`/analytics/payments?${baseQuery}`),
+      api.get<FailuresResponse>(`/analytics/failures?${baseQuery}`),
+      api.get<CurrenciesResponse>(`/analytics/currencies?${baseQuery}`),
     ] as const);
 
   if (
