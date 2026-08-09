@@ -90,6 +90,35 @@ export function useProvisionSettlement() {
   });
 }
 
+export interface WithdrawResult {
+  stellarTxHash: string;
+  amount: string;
+  asset: string;
+  destinationAddress: string;
+  submittedAt: string;
+}
+
+export function useWithdrawSettlement() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    WithdrawResult,
+    Error,
+    { destinationAddress: string; amount: string }
+  >({
+    mutationFn: (body) =>
+      api.post("/merchants/me/settlement/withdraw", {
+        ...body,
+        asset: "USDC",
+      }),
+    onSuccess: () => {
+      // The balance moved on-chain; anything showing it is now stale.
+      queryClient.invalidateQueries({ queryKey: ["merchant-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["balances"] });
+    },
+  });
+}
+
 // ─── Branding ────────────────────────────────────────────────────────────────
 
 export function useUpdateBranding() {
