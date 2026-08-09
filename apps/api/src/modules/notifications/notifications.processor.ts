@@ -10,11 +10,29 @@ import { EmailJobData } from './types';
 })
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
-  private resend: Resend;
+  private resend: Resend | null = null;
   private fromEmail: string;
 
   constructor(private readonly configService: ConfigService) {
     super();
+
+    this.fromEmail = this.configService.get<string>(
+      'EMAIL_FROM',
+      'noreply@useroutr.com',
+    );
+  }
+
+  /**
+   * Resolve the Resend client on first send rather than at construction.
+   *
+   * Throwing in the constructor made email a hard boot dependency: without
+   * RESEND_API_KEY this provider failed to instantiate, which takes the whole
+   * AppModule down. An API that will not start because nobody configured
+   * transactional email is a worse failure than an email that fails to send —
+   * and the job that sends it already retries and records its own errors.
+   */
+  private client(): Resend {
+    if (this.resend) return this.resend;
 
     const apiKey = this.configService.get<string>('RESEND_API_KEY');
     if (!apiKey) {
@@ -24,10 +42,7 @@ export class NotificationsProcessor extends WorkerHost {
     }
 
     this.resend = new Resend(apiKey);
-    this.fromEmail = this.configService.get<string>(
-      'EMAIL_FROM',
-      'noreply@useroutr.com',
-    );
+    return this.resend;
   }
 
   async process(job: Job<EmailJobData>): Promise<void> {
@@ -39,7 +54,7 @@ export class NotificationsProcessor extends WorkerHost {
         try {
           this.logger.debug(`Sending email to ${toString}`);
 
-          const response = await this.resend.emails.send({
+          const response = await this.client().emails.send({
             from: this.fromEmail,
             to: typeof to === 'string' ? [to] : to,
             subject,
