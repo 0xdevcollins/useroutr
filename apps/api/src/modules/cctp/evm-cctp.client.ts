@@ -102,6 +102,25 @@ const FINALITY_THRESHOLD = {
  * burns (customer's wallet does that), and only signs the destination
  * mint if explicitly configured to self-relay.
  */
+/**
+ * Public testnet endpoints, used when no `RPC_<CHAIN>_TESTNET` is configured.
+ *
+ * These are the chains' own published endpoints, not a third party's. They are
+ * rate-limited and unsuitable for production — which is fine, because this map
+ * is only consulted when `env === 'testnet'`. The point is that cloning the
+ * repo and paying on Sepolia should not first require signing up to Alchemy.
+ *
+ * Networks match the testnets CCTP V2 addresses in contracts.ts refer to:
+ * Sepolia, Base Sepolia, Arbitrum Sepolia, OP Sepolia and Avalanche Fuji.
+ */
+const PUBLIC_TESTNET_RPC: Record<string, string> = {
+  ethereum: 'https://ethereum-sepolia-rpc.publicnode.com',
+  base: 'https://sepolia.base.org',
+  arbitrum: 'https://sepolia-rollup.arbitrum.io/rpc',
+  optimism: 'https://sepolia.optimism.io',
+  avalanche: 'https://api.avax-test.network/ext/bc/C/rpc',
+};
+
 @Injectable()
 export class EvmCctpClient {
   private readonly logger = new Logger(EvmCctpClient.name);
@@ -246,26 +265,63 @@ export class EvmCctpClient {
   /* ─────────────────────────────── internals ────────────────────── */
 
   /**
-   * Returns a (cached) RPC provider for `chainId`. Reads the per-chain
-   * RPC URL from `RPC_<UPPERCASE_ID>` env. Throws with a clear error if
-   * the env var is missing — fast-fail beats a `null is not a function`
-   * mystery at runtime.
+   * Returns a (cached) RPC provider for `chainId`, on the network this client
+   * is configured for.
+   *
+   * The chain id does not change between networks — `ethereum` is `ethereum`
+   * whether we mean mainnet or Sepolia; only the contract addresses switch on
+   * `env`. So a single `RPC_ETHEREUM` cannot serve both, and when it was the
+   * only lookup, a testnet payment read Sepolia's USDC and TokenMessenger
+   * addresses off a *mainnet* node. Nothing is deployed at those addresses
+   * there, so the calls came back as empty reverts — or, if the mainnet URL
+   * carried a stale key, as a bare 401 that looked like a credentials problem
+   * rather than a wrong-network one.
+   *
+   * On testnet the per-chain override is `RPC_<CHAIN>_TESTNET`, falling back to
+   * that chain's public endpoint so a local testnet run needs no third-party
+   * key at all. Mainnet keeps `RPC_<CHAIN>` and no default: guessing a public
+   * endpoint for real money is not a favour.
    */
   private providerFor(chainId: string): ethers.JsonRpcProvider {
     const cached = this.providers.get(chainId);
     if (cached) return cached;
 
-    const envKey = `RPC_${chainId.toUpperCase()}`;
-    const rpcUrl = this.config.get<string>(envKey);
-    if (!rpcUrl) {
+    const rpcUrl = this.rpcUrlFor(chainId);
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    this.providers.set(chainId, provider);
+    return provider;
+  }
+
+  private rpcUrlFor(chainId: string): string {
+    const upper = chainId.toUpperCase();
+
+    if (this.env === 'testnet') {
+      const envKey = `RPC_${upper}_TESTNET`;
+      const configured = this.config.get<string>(envKey);
+      if (configured) return configured;
+
+      const fallback = PUBLIC_TESTNET_RPC[chainId];
+      if (fallback) {
+        this.logger.debug(
+          `No ${envKey} set for "${chainId}" — using the public testnet endpoint ${fallback}. ` +
+            `Set ${envKey} to use your own provider.`,
+        );
+        return fallback;
+      }
+
+      throw new Error(
+        `missing testnet RPC endpoint for chain "${chainId}" (set ${envKey})`,
+      );
+    }
+
+    const envKey = `RPC_${upper}`;
+    const configured = this.config.get<string>(envKey);
+    if (!configured) {
       throw new Error(
         `missing RPC endpoint for chain "${chainId}" (set ${envKey})`,
       );
     }
-
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    this.providers.set(chainId, provider);
-    return provider;
+    return configured;
   }
 
   /**
