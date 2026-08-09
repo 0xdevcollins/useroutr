@@ -8,6 +8,7 @@ import {
 } from '@useroutr/ui';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { Recipient } from '@useroutr/types';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 
@@ -24,11 +25,8 @@ export function RecipientSelect({
 
   const recipientsQuery = useQuery({
     queryKey: ['recipients'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/recipients?limit=20');
-      if (!res.ok) throw new Error('Failed to fetch recipients');
-      return (await res.json()) as { data: Recipient[] };
-    },
+    queryFn: () =>
+      api.get<{ data: Recipient[] }>('/recipients', { params: { limit: 20 } }),
   });
 
   const selectedRecipient = recipientsQuery.data?.data.find(r => r.id === value);

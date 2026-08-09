@@ -6,6 +6,7 @@ import { Button, Skeleton } from "@useroutr/ui";
 import { useToast } from "@useroutr/ui";
 import Link from "next/link";
 import { LinkStatusBadge } from "@/components/links/LinkStatusBadge";
+import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 
 import type { PaymentLink } from "@useroutr/types";
@@ -40,24 +41,34 @@ export default function LinkDetailPage() {
     try {
       setLoading(true);
 
-      const [linkRes, statsRes, paymentsRes] = await Promise.all([
-        fetch(`/v1/payment-links/${id}`),
-        fetch(`/v1/payment-links/${id}/stats`),
-        fetch(`/v1/payments?linkId=${id}`),
-      ]);
+      // allSettled, not all: a missing link is "not found" (no toast), while a
+      // failing stats/payments call should still leave the link itself usable.
+      const [linkResult, statsResult, paymentsResult] = await Promise.allSettled(
+        [
+          api.get<PaymentLink>(`/payment-links/${id}`),
+          api.get<LinkStats>(`/payment-links/${id}/stats`),
+          // `/payments` is paginated: the envelope is { items, meta }, and the
+          // api client has already unwrapped the outer { data }. Reading
+          // `.data` here would always be undefined and the table would render
+          // empty with no error to explain why.
+          api.get<{ items?: LinkPayment[] }>(`/payments`, {
+            params: { linkId: id },
+          }),
+        ]
+      );
 
-      if (!linkRes.ok) {
+      if (linkResult.status !== "fulfilled") {
         setLink(null);
         return;
       }
 
-      const linkData = await linkRes.json();
-      const statsData = await statsRes.json();
-      const paymentsData = await paymentsRes.json();
-
-      setLink(linkData);
-      setStats(statsData);
-      setPayments(paymentsData?.data ?? paymentsData ?? []);
+      setLink(linkResult.value);
+      setStats(statsResult.status === "fulfilled" ? statsResult.value : null);
+      setPayments(
+        paymentsResult.status === "fulfilled"
+          ? (paymentsResult.value?.items ?? [])
+          : []
+      );
     } catch {
       toast(`Failed to load link`, "error");
     } finally {
@@ -93,9 +104,15 @@ export default function LinkDetailPage() {
 
     if (!ok) return;
 
-    await fetch(`/v1/payment-links/${link.id}`, {
-      method: "DELETE",
-    });
+    try {
+      await api.delete(`/payment-links/${link.id}`);
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Failed to deactivate link",
+        "error"
+      );
+      return;
+    }
 
     toast("Link deactivated", "success");
 

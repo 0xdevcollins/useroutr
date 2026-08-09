@@ -16,29 +16,33 @@ import {
   ShadSelectItem as SelectItem,
   ShadSelectTrigger as SelectTrigger,
   ShadSelectValue as SelectValue,
+  useToast,
 } from '@useroutr/ui';
 import { RecipientSelect } from '@/components/recipients/RecipientSelect';
+import { api } from '@/lib/api';
 
 export function CreatePayoutDialog() {
   const [open, setOpen] = useState(false);
   const [recipientId, setRecipientId] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
+  const { toast } = useToast();
 
-  const handleSubmit = () => {
-    fetch('/api/v1/payouts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recipientId,
-        amount,
-        currency,
-      }),
-    }).then(() => {
-      setOpen(false);
-      // Refetch payouts
-      window.dispatchEvent(new CustomEvent('payouts:refetch'));
-    });
+  const handleSubmit = async () => {
+    try {
+      await api.post('/payouts', { recipientId, amount, currency });
+    } catch (error) {
+      // Keep the dialog open so the entered values survive a failed submit.
+      toast(
+        error instanceof Error ? error.message : 'Failed to create payout',
+        'error',
+      );
+      return;
+    }
+
+    setOpen(false);
+    // Refetch payouts
+    window.dispatchEvent(new CustomEvent('payouts:refetch'));
   };
 
   return (
