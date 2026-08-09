@@ -26,9 +26,36 @@ import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
 // STELLAR_NETWORK (testnet → sepolia variants, mainnet → mainnet). The
 // frontend doesn't know which side the API is on; including both lets
 // RainbowKit's switcher offer whichever the customer's wallet is on.
+const WALLETCONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "placeholder";
+
+// "placeholder" is not a real project id, so Reown answers 403 and the wallet
+// modal comes up empty. The only clue was an unattributed 403 in the console,
+// which reads like a network blip rather than a missing variable — say what it
+// is, in development.
+//
+// The flag is on `window` rather than module scope because Next re-evaluates
+// this module across routes and HMR passes, which printed the same warning
+// three times on a single page load.
+const WARNED_FLAG = "__useroutrWalletConnectWarned";
+
+if (
+  process.env.NODE_ENV !== "production" &&
+  WALLETCONNECT_PROJECT_ID === "placeholder" &&
+  typeof window !== "undefined" &&
+  !(window as unknown as Record<string, boolean>)[WARNED_FLAG]
+) {
+  (window as unknown as Record<string, boolean>)[WARNED_FLAG] = true;
+  console.warn(
+    "[checkout] NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is unset, so wallet " +
+      "connect will fail with a 403 from Reown. Create a project at " +
+      "https://cloud.reown.com and set the variable in apps/checkout/.env.local.",
+  );
+}
+
 const config = getDefaultConfig({
   appName: "Useroutr Checkout",
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "placeholder",
+  projectId: WALLETCONNECT_PROJECT_ID,
   chains: [
     mainnet,
     sepolia,
