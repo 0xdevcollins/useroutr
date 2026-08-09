@@ -154,6 +154,8 @@ interface IrisResponse {
     attestation?: string;
     forwardTxHash?: string;
     errorMessage?: string;
+    /** bytes32. The only place a V2 nonce exists — see AttestationResponse. */
+    eventNonce?: string;
   }>;
 }
 
@@ -174,6 +176,7 @@ function normalizeIrisResponse(raw: IrisResponse): AttestationResponse {
       message: msg.message,
       attestation: msg.attestation,
       forwardTxHash: msg.forwardTxHash,
+      eventNonce: msg.eventNonce,
     };
   }
   if (status === 'failed' || msg.errorMessage) {
@@ -182,7 +185,7 @@ function normalizeIrisResponse(raw: IrisResponse): AttestationResponse {
       error: msg.errorMessage ?? 'attestation failed (no detail from Iris)',
     };
   }
-  return { status: 'pending_confirmations' };
+  return { status: 'pending_confirmations', eventNonce: msg.eventNonce };
 }
 
 function backoff(attempt: number): number {

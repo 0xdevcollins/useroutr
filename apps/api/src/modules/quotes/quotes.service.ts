@@ -18,7 +18,34 @@ import { Chain } from '@useroutr/types';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 
+/**
+ * How long a quote stays valid.
+ *
+ * A quote is locked because the price can move between quoting and executing.
+ * That risk is real when the assets differ, and it is why this was 30 seconds.
+ *
+ * It is not real when they don't. USDC → USDC quotes at a rate of exactly 1
+ * whether it is read now or ten minutes from now; the only variable is the fee,
+ * which is a fixed bps of the merchant's own configuration. Holding those to 30
+ * seconds priced in a risk that does not exist — and 30 seconds is less than a
+ * wallet round trip. Paying from MetaMask means reading the quote, approving
+ * the token (one transaction, mined), then burning (a second): comfortably past
+ * 30s on a busy testnet, so the quote expired mid-flow and the payer got an
+ * error for doing nothing wrong.
+ */
 const QUOTE_TTL_SECONDS = 30;
+
+/**
+ * Same-asset transfers, where the rate cannot drift. Sized for a two-signature
+ * wallet flow with room for a slow block, not for a machine-driven API caller.
+ */
+const SAME_ASSET_QUOTE_TTL_SECONDS = 600;
+
+function quoteTtlSeconds(fromAsset: string, toAsset: string): number {
+  return fromAsset === toAsset
+    ? SAME_ASSET_QUOTE_TTL_SECONDS
+    : QUOTE_TTL_SECONDS;
+}
 
 @Injectable()
 export class QuotesService {
@@ -112,7 +139,8 @@ export class QuotesService {
       const estimatedTimeMs = routeDecision.estimatedTimeMs;
 
       // Create quote with TTL
-      const expiresAt = new Date(Date.now() + QUOTE_TTL_SECONDS * 1000);
+      const ttlSeconds = quoteTtlSeconds(dto.fromAsset, toAsset);
+      const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
       const quote = await this.prisma.quote.create({
         data: {
@@ -135,15 +163,15 @@ export class QuotesService {
       // Lock in Redis with TTL
       await this.redis.setex(
         `quote:${quote.id}`,
-        QUOTE_TTL_SECONDS,
+        ttlSeconds,
         JSON.stringify({ locked: true, createdAt: Date.now() }),
       );
 
       this.logger.debug(
-        `Quote ${quote.id} created and locked for ${QUOTE_TTL_SECONDS}s`,
+        `Quote ${quote.id} created and locked for ${ttlSeconds}s`,
       );
 
-      return this.toResponseDto(quote, QUOTE_TTL_SECONDS, estimatedTimeMs);
+      return this.toResponseDto(quote, ttlSeconds, estimatedTimeMs);
     } catch (error) {
       this.logger.error('Error creating quote:', error);
       throw error;

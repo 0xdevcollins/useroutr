@@ -17,9 +17,15 @@ import type { CctpTransferRequest } from './types.js';
  * signature is included because we parse it from receipts to extract
  * the burn nonce (needed for Iris attestation lookup).
  */
-const TOKEN_MESSENGER_V2_ABI = [
+export const TOKEN_MESSENGER_V2_ABI = [
   'function depositForBurnWithHook(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData) returns (uint64 nonce)',
-  'event DepositForBurn(uint64 indexed nonce, address indexed burnToken, uint256 amount, address indexed depositor, bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)',
+  // V2's DepositForBurn, which carries NO nonce — the third indexed field is
+  // minFinalityThreshold. This was previously declared V1-style, with a leading
+  // `uint64 indexed nonce`, and that one difference changes the whole topic
+  // hash: 0xe3db7593… instead of the 0x0c8c1cbd… chains actually emit. Nothing
+  // ever matched, so every EVM burn came back "not a CCTP burn" — including
+  // real, successful ones.
+  'event DepositForBurn(address indexed burnToken, uint256 amount, address indexed depositor, bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger, bytes32 destinationCaller, uint256 maxFee, uint32 indexed minFinalityThreshold, bytes hookData)',
 ] as const;
 
 /**
@@ -56,7 +62,14 @@ export interface EvmTransactionPayload {
  * `nonce` is what Iris keys attestations by, so it's the critical bit.
  */
 export interface ParsedBurn {
-  nonce: bigint;
+  /**
+   * Null on EVM. CCTP V2 does not assign the nonce at burn time — the
+   * `MessageSent` payload carries a zero placeholder, and Circle stamps the
+   * real value when it attests, so it arrives later as Iris's `eventNonce`.
+   * Stellar's burn event does surface one, which is why this is nullable
+   * rather than gone.
+   */
+  nonce: bigint | null;
   amount: bigint;
   depositor: string;
   mintRecipient: string;
@@ -199,6 +212,12 @@ export class EvmCctpClient {
    * and return the structured fields downstream code needs. Returns
    * `null` if the tx isn't found or has no matching event (e.g., wrong
    * tx hash, not a CCTP burn).
+   *
+   * The two null cases are logged separately. Callers collapse them into one
+   * message — "not found on <chain> (or not a CCTP burn)" — and while that
+   * covers both, it points at the wrong one first: it reads as a bad tx hash
+   * or wrong network, so a real burn that simply failed to decode sends you
+   * hunting the RPC config instead of the ABI.
    */
   async parseBurnReceipt(
     chainId: string,
@@ -206,7 +225,13 @@ export class EvmCctpClient {
   ): Promise<ParsedBurn | null> {
     const provider = this.providerFor(chainId);
     const receipt = await provider.getTransactionReceipt(txHash);
-    if (!receipt) return null;
+    if (!receipt) {
+      this.logger.warn(
+        `No receipt for ${txHash} on ${chainId} at ${this.rpcUrlFor(chainId)} — ` +
+          `unmined, dropped, or a hash from a different network.`,
+      );
+      return null;
+    }
 
     const iface = new ethers.Interface(TOKEN_MESSENGER_V2_ABI);
     const expectedTopic = iface.getEvent('DepositForBurn')!.topicHash;
@@ -219,7 +244,8 @@ export class EvmCctpClient {
       });
       if (!parsed) continue;
       return {
-        nonce: parsed.args.nonce as bigint,
+        // Not in the V2 event; Iris supplies it at attestation time.
+        nonce: null,
         amount: parsed.args.amount as bigint,
         depositor: parsed.args.depositor as string,
         mintRecipient: parsed.args.mintRecipient as string,
@@ -228,6 +254,14 @@ export class EvmCctpClient {
       };
     }
 
+    // The receipt exists, so the tx is real and on the right chain — it just
+    // holds no log we recognise. Naming the topic we looked for turns an ABI
+    // mismatch into a one-line diff rather than a hunt.
+    this.logger.warn(
+      `Receipt ${txHash} on ${chainId} has ${receipt.logs.length} log(s) but no ` +
+        `DepositForBurn matching ${expectedTopic}. Either it is not a CCTP burn, ` +
+        `or the TokenMessenger ABI here has drifted from the deployed contract.`,
+    );
     return null;
   }
 

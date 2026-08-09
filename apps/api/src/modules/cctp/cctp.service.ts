@@ -276,7 +276,13 @@ export class CctpService {
 
 /** Shape both EVM and Stellar burn parsers collapse into. */
 interface NormalizedBurn {
-  nonce: bigint;
+  /**
+   * Null for EVM burns: CCTP V2 removed the nonce from `DepositForBurn`, and
+   * Circle assigns it at attestation time instead. Stellar's burn event still
+   * carries one. Callers that need it should prefer the attestation's
+   * `eventNonce` and fall back to this.
+   */
+  nonce: bigint | null;
   /** Always CCTP 6-decimal subunits (Stellar scaling is unwound on parse). */
   amount: bigint;
   depositor: string;
