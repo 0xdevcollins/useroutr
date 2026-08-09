@@ -430,6 +430,60 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('selectCrypto — self-custodied merchant wallet', () => {
+    it('names the supported flow instead of failing generically', async () => {
+      // A smart wallet is a contract address. A classic payment operation
+      // cannot target one, and Circle's mint path is unverified for it — so
+      // the error has to say which flow does work rather than look like
+      // misconfiguration.
+      prisma.payment.findUnique.mockResolvedValue({
+        ...paymentRecord,
+        destAmount: new Prisma.Decimal(50),
+        merchant: {
+          id: 'merchant_123',
+          settlementAddress:
+            'CDKAIND4CJUC4SNVLSXS5CH5GOMNQPBU4F6I2DY4ZFNO7LKP4HM3YAIK',
+        },
+        quote: null,
+      });
+
+      await expect(service.selectCrypto('pay_123', 'stellar')).rejects.toThrow(
+        /self-custodied smart wallet/i,
+      );
+    });
+
+    it('still accepts a classic settlement address', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...paymentRecord,
+        destAmount: new Prisma.Decimal(50),
+        merchant: {
+          id: 'merchant_123',
+          settlementAddress:
+            'GBBN5WUDNH5P7ZG3CKJIWZ6CXQY2PXL23H2K36QIE53UGAXWZDWJP3D7',
+        },
+        quote: null,
+      });
+      prisma.quote.findUnique.mockResolvedValue({
+        id: 'qt_1',
+        fromAmount: new Prisma.Decimal(50),
+        fromAsset: 'USDC',
+        fromChain: 'stellar',
+        toAmount: new Prisma.Decimal(50),
+        toAsset: 'USDC',
+        toChain: 'stellar',
+        rate: new Prisma.Decimal(1),
+        feeAmount: new Prisma.Decimal(0.25),
+        feeBps: 50,
+        expiresAt: new Date(Date.now() + 30_000),
+      });
+      quotesService.createQuote.mockResolvedValue({ id: 'qt_1' });
+
+      await expect(service.selectCrypto('pay_123', 'stellar')).resolves.toEqual(
+        expect.objectContaining({ method: 'stellar' }),
+      );
+    });
+  });
+
   describe('buildStellarEscrowTx', () => {
     // Restored after this block so later describes see the original stub.
     afterAll(() => {

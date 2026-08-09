@@ -110,6 +110,14 @@ model MerchantSettlementKey {
   iv              String?
   authTag         String?
   managed         Boolean   @default(true)
+  /// WebAuthn credential controlling a self-custodied smart wallet. Set only
+  /// when `managed` is false; the seed columns are null in that case because
+  /// there is no seed — the merchant's device holds the key.
+  passkeyCredentialId String?
+  /// Soroban smart-wallet contract address (C...). `stellarAddress` stays the
+  /// canonical settlement address either way, so callers do not have to know
+  /// which kind of wallet a merchant has.
+  smartWalletAddress  String?
   rotatedAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
