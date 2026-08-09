@@ -9,6 +9,7 @@ import {
   TransactionBuilder,
   nativeToScVal,
   rpc as stellarRpc,
+  scValToNative,
   xdr,
 } from '@stellar/stellar-sdk';
 import {
@@ -228,13 +229,72 @@ export class StellarCctpClient {
   /* ────────────────────────────── 3. Self-relay mint ────────────── */
 
   /**
+   * Has this message already been minted on Stellar?
+   *
+   * `MessageTransmitter.is_nonce_used` is the destination side's replay guard,
+   * and it is the only honest way to make a retried mint idempotent. Submitting
+   * a message twice fails, and a worker that retries has no way to tell "this
+   * failed" from "this already worked" without asking.
+   *
+   * Read-only: simulated, never submitted, so it costs nothing and needs no
+   * signature.
+   */
+  async isNonceUsed(nonceHex: string): Promise<boolean> {
+    const contracts = getStellarContracts(this.env);
+    const server = this.server();
+
+    const nonce = Buffer.from(strip0x(nonceHex), 'hex');
+    if (nonce.length !== 32) {
+      throw new Error(
+        `CCTP nonce must be 32 bytes, got ${nonce.length} (${nonceHex})`,
+      );
+    }
+
+    // Any funded account works as the simulation source — nothing is signed or
+    // submitted, and the ledger is not touched.
+    const relaySecret = this.config.get<string>('STELLAR_RELAY_KEYPAIR_SECRET');
+    if (!relaySecret) {
+      throw new Error(
+        'checking a CCTP nonce requires STELLAR_RELAY_KEYPAIR_SECRET',
+      );
+    }
+    const keypair = Keypair.fromSecret(relaySecret);
+    const account = await server.getAccount(keypair.publicKey());
+
+    const contract = new Contract(contracts.messageTransmitter);
+    const tx = new TransactionBuilder(account, {
+      fee: DEFAULT_BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(contract.call('is_nonce_used', xdr.ScVal.scvBytes(nonce)))
+      .setTimeout(30)
+      .build();
+
+    const sim = await server.simulateTransaction(tx);
+    if (stellarRpc.Api.isSimulationError(sim)) {
+      throw new Error(`is_nonce_used simulation failed: ${sim.error}`);
+    }
+    const retval = sim.result?.retval;
+    if (!retval) {
+      throw new Error('is_nonce_used returned no value');
+    }
+    return scValToNative(retval) === true;
+  }
+
+  /**
    * Submit `CctpForwarder.mint_and_forward(message, attestation)` on
-   * Stellar — the self-relay path for an inbound mint. Not used when
-   * Circle's Forwarding Service is enabled (which it is in v1), but
-   * present so we have a fallback if Circle is degraded.
+   * Stellar.
+   *
+   * This is the path that actually settles a Stellar-destined payment.
+   * `mint_and_forward` takes no authorisation argument — anyone may submit an
+   * attested message, and the contract forwards the minted USDC to the
+   * recipient encoded in the burn's hookData. Nobody does it for us: Circle's
+   * Forwarding Service returns no `forwardTxHash` for this route, so a payment
+   * whose attestation completed simply sat unminted until someone called this.
    *
    * Requires a Stellar relay keypair (`STELLAR_RELAY_KEYPAIR_SECRET`)
-   * funded with XLM on the appropriate network.
+   * funded with XLM on the appropriate network. It pays the fee only; the
+   * USDC comes from the attested message, so this wallet never holds funds.
    */
   async submitMintViaForwarder(
     message: string,
