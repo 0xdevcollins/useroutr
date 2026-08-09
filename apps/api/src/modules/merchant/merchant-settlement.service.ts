@@ -252,15 +252,27 @@ export class MerchantSettlementService {
    * withdrawal that vanishes mid-flight leaves a record saying so rather than
    * no record at all.
    */
-  async withdraw(
+  /**
+   * Guards shared by both withdrawal paths. Managed and self-custodied differ
+   * only in who signs; everything that can lose money — a bad destination, a
+   * missing trustline, an amount that would drain reserves — is identical, and
+   * duplicating it is how the two drift apart.
+   */
+  private async validateWithdrawal(
     merchantId: string,
     params: { destinationAddress: string; amount: string; asset?: string },
+    expect?: 'managed' | 'self-custodied',
   ): Promise<{
-    stellarTxHash: string;
-    amount: string;
+    row: {
+      managed: boolean;
+      stellarAddress: string;
+      smartWalletAddress: string | null;
+      encryptedSeed: string | null;
+      iv: string | null;
+      authTag: string | null;
+    };
+    amount: Prisma.Decimal;
     asset: string;
-    destinationAddress: string;
-    submittedAt: string;
   }> {
     const asset = (params.asset ?? 'USDC').toUpperCase();
     if (asset !== 'USDC') {
@@ -279,15 +291,22 @@ export class MerchantSettlementService {
     if (!row) {
       throw new NotFoundException('No settlement wallet for this merchant');
     }
-    if (!row.managed) {
-      // A passkey wallet signs client-side; there is no seed here to use.
+
+    // Checked before any network call: there is no point asking Horizon about
+    // balances only to tell the caller they are on the wrong endpoint.
+    if (expect === 'managed' && !row.managed) {
       throw new BadRequestException(
-        'This settlement wallet is self-custodied. Withdraw with your passkey instead.',
+        'This settlement wallet is self-custodied. Use the prepare/submit flow instead.',
+      );
+    }
+    if (expect === 'self-custodied' && row.managed) {
+      throw new BadRequestException(
+        'This wallet is managed; use POST /settlement/withdraw instead.',
       );
     }
 
-    const usdc = new StellarSdk.Asset('USDC', this.usdcIssuer);
-    const account = await this.horizon.loadAccount(row.stellarAddress);
+    const walletAddress = row.smartWalletAddress ?? row.stellarAddress;
+    const account = await this.horizon.loadAccount(walletAddress);
 
     const usdcBalance = account.balances.find(
       (b) =>
@@ -310,9 +329,6 @@ export class MerchantSettlementService {
       );
     }
 
-    // Stellar rejects a payment to an account without a trustline for the
-    // asset, and a rejected payment is a failed transaction, not a refund.
-    // Better to say so before the merchant watches it fail.
     const destination = await this.horizon
       .loadAccount(params.destinationAddress)
       .catch(() => null);
@@ -333,6 +349,26 @@ export class MerchantSettlementService {
         'The destination address must have a USDC trustline before it can receive USDC.',
       );
     }
+
+    return { row, amount, asset };
+  }
+
+  async withdraw(
+    merchantId: string,
+    params: { destinationAddress: string; amount: string; asset?: string },
+  ): Promise<{
+    stellarTxHash: string;
+    amount: string;
+    asset: string;
+    destinationAddress: string;
+    submittedAt: string;
+  }> {
+    const { row, amount, asset } = await this.validateWithdrawal(
+      merchantId,
+      params,
+      'managed',
+    );
+    const usdc = new StellarSdk.Asset('USDC', this.usdcIssuer);
 
     const audit = await this.prisma.settlementWithdrawal.create({
       data: {
@@ -393,6 +429,180 @@ export class MerchantSettlementService {
         `Withdrawal could not be submitted: ${reason}`,
       );
     }
+  }
+
+  /**
+   * Build an unsigned withdrawal for a self-custodied wallet.
+   *
+   * The managed path decrypts a seed and signs server-side. A passkey wallet
+   * has no seed here — the merchant's device holds the key — so the split is
+   * prepare/submit: we build it, they sign it with WebAuthn, we broadcast it.
+   * Notably this needs no passkey-kit dependency server-side; WebAuthn is
+   * entirely a browser concern, and all we handle is XDR.
+   *
+   * Moving USDC out of a smart wallet is a Soroban token transfer, not a
+   * classic payment operation — a contract cannot be the source of one.
+   */
+  async prepareWithdrawal(
+    merchantId: string,
+    params: { destinationAddress: string; amount: string; asset?: string },
+  ): Promise<{
+    withdrawalId: string;
+    xdr: string;
+    networkPassphrase: string;
+    amount: string;
+  }> {
+    const { row, amount, asset } = await this.validateWithdrawal(
+      merchantId,
+      params,
+      'self-custodied',
+    );
+    const walletAddress = row.smartWalletAddress ?? row.stellarAddress;
+
+    const sacId = this.usdcContractId();
+    const contract = new StellarSdk.Contract(sacId);
+    const source = await this.soroban().getAccount(walletAddress);
+
+    const tx = new StellarSdk.TransactionBuilder(source, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(
+        contract.call(
+          'transfer',
+          new StellarSdk.Address(walletAddress).toScVal(),
+          new StellarSdk.Address(params.destinationAddress).toScVal(),
+          StellarSdk.nativeToScVal(this.toStroops(amount), { type: 'i128' }),
+        ),
+      )
+      .setTimeout(300)
+      .build();
+
+    const simulated = await this.soroban().simulateTransaction(tx);
+    if (StellarSdk.rpc.Api.isSimulationError(simulated)) {
+      throw new UnprocessableEntityException(
+        `Withdrawal would fail: ${simulated.error}`,
+      );
+    }
+    const prepared = StellarSdk.rpc
+      .assembleTransaction(
+        tx,
+        simulated as StellarSdk.rpc.Api.SimulateTransactionSuccessResponse,
+      )
+      .build();
+
+    const audit = await this.prisma.settlementWithdrawal.create({
+      data: {
+        merchantId,
+        amount: amount.toString(),
+        asset,
+        destinationAddress: params.destinationAddress,
+        status: 'prepared',
+      },
+    });
+
+    return {
+      withdrawalId: audit.id,
+      xdr: prepared.toXDR(),
+      networkPassphrase: this.networkPassphrase,
+      amount: amount.toString(),
+    };
+  }
+
+  /**
+   * Broadcast a withdrawal the merchant signed with their passkey.
+   *
+   * The signed XDR is checked against the row we prepared before it goes
+   * anywhere. Submitting whatever arrives would make the audit trail a
+   * fiction — it would claim a withdrawal we never verified, which is exactly
+   * the record someone will rely on in a dispute.
+   */
+  async submitWithdrawal(
+    merchantId: string,
+    withdrawalId: string,
+    signedXdr: string,
+  ): Promise<{ stellarTxHash: string; amount: string }> {
+    const audit = await this.prisma.settlementWithdrawal.findUnique({
+      where: { id: withdrawalId },
+    });
+    if (!audit || audit.merchantId !== merchantId) {
+      throw new NotFoundException('Withdrawal not found');
+    }
+    if (audit.status !== 'prepared') {
+      throw new ConflictException(
+        `Withdrawal is ${audit.status}; only a prepared withdrawal can be submitted`,
+      );
+    }
+
+    const row = await this.prisma.merchantSettlementKey.findUnique({
+      where: { merchantId },
+    });
+    const walletAddress = row?.smartWalletAddress ?? row?.stellarAddress;
+
+    let tx: StellarSdk.Transaction;
+    try {
+      tx = new StellarSdk.Transaction(signedXdr, this.networkPassphrase);
+    } catch {
+      throw new BadRequestException('signedXdr is not a valid transaction');
+    }
+
+    // The source must be the merchant's own wallet. Without this we would
+    // relay an arbitrary signed transaction and file it under their name.
+    if (tx.source !== walletAddress) {
+      throw new BadRequestException(
+        'Signed transaction does not originate from this settlement wallet',
+      );
+    }
+    if (tx.signatures.length === 0) {
+      throw new BadRequestException('Transaction is not signed');
+    }
+
+    try {
+      const sent = await this.soroban().sendTransaction(tx);
+      if (sent.status === 'ERROR') {
+        throw new Error(`submission rejected: ${sent.status}`);
+      }
+
+      await this.prisma.settlementWithdrawal.update({
+        where: { id: audit.id },
+        data: { status: 'submitted', stellarTxHash: sent.hash },
+      });
+
+      return { stellarTxHash: sent.hash, amount: audit.amount.toString() };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      await this.prisma.settlementWithdrawal.update({
+        where: { id: audit.id },
+        data: { status: 'failed', failureReason: reason },
+      });
+      throw new ServiceUnavailableException(
+        `Withdrawal could not be submitted: ${reason}`,
+      );
+    }
+  }
+
+  private toStroops(amount: Prisma.Decimal): bigint {
+    return BigInt(amount.mul(10_000_000).toFixed(0));
+  }
+
+  private usdcContractId(): string {
+    const key = this.isTestnet
+      ? 'STELLAR_USDC_SAC_TESTNET'
+      : 'STELLAR_USDC_SAC_MAINNET';
+    const id = this.config.get<string>(key);
+    if (!id) {
+      throw new BadRequestException(
+        `Self-custodied withdrawals need the USDC contract id: set ${key}`,
+      );
+    }
+    return id;
+  }
+
+  private soroban(): StellarSdk.rpc.Server {
+    return new StellarSdk.rpc.Server(
+      this.config.get<string>('STELLAR_SOROBAN_RPC_URL') ??
+        'https://soroban-testnet.stellar.org',
+    );
   }
 
   decryptSeed(row: {

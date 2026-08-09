@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -100,6 +101,40 @@ export class MerchantController {
     @Body(new ZodValidationPipe(WithdrawSchema)) dto: WithdrawDto,
   ) {
     return this.settlement.withdraw(merchantId, dto);
+  }
+
+  /**
+   * Self-custodied withdrawal, step 1: we build it, they sign it.
+   *
+   * Split from the managed endpoint because a passkey wallet has no seed on
+   * our side. WebAuthn is entirely a browser concern — all the server handles
+   * is XDR, so no passkey-kit dependency is needed here.
+   */
+  @Post('me/settlement/withdraw/prepare')
+  @Throttle({ default: { limit: 3, ttl: 3_600_000 } })
+  @HttpCode(HttpStatus.OK)
+  prepareWithdrawal(
+    @CurrentMerchant('id') merchantId: string,
+    @Body(new ZodValidationPipe(WithdrawSchema)) dto: WithdrawDto,
+  ) {
+    return this.settlement.prepareWithdrawal(merchantId, dto);
+  }
+
+  /** Step 2: broadcast what they signed, after checking it is what we built. */
+  @Post('me/settlement/withdraw/submit')
+  @HttpCode(HttpStatus.OK)
+  submitWithdrawal(
+    @CurrentMerchant('id') merchantId: string,
+    @Body() body: { withdrawalId: string; signedXdr: string },
+  ) {
+    if (!body?.withdrawalId || !body?.signedXdr) {
+      throw new BadRequestException('withdrawalId and signedXdr are required');
+    }
+    return this.settlement.submitWithdrawal(
+      merchantId,
+      body.withdrawalId,
+      body.signedXdr,
+    );
   }
 
   // ── Branding ─────────────────────────────────────────────────
