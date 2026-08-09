@@ -7,6 +7,8 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { ApiKeyGuard } from '../../common/guards/api-key.guard.js';
 import { CombinedAuthGuard } from '../../common/guards/combined-auth.guard.js';
+import { BullModule } from '@nestjs/bullmq';
+import { SETTLEMENT_PROVISION_QUEUE } from '../merchant/settlement-provision.constants';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 // MerchantSettlementService is provided directly here (rather than via
 // MerchantModule import) to avoid the circular dependency: MerchantModule
@@ -23,6 +25,9 @@ import { MerchantSettlementService } from '../merchant/merchant-settlement.servi
       signOptions: { expiresIn: '15m' },
     }),
     NotificationsModule,
+    // Registration enqueues settlement-wallet provisioning rather than waiting
+    // on two Stellar round trips inside the request.
+    BullModule.registerQueue({ name: SETTLEMENT_PROVISION_QUEUE }),
   ],
   providers: [
     AuthService,

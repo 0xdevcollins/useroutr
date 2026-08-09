@@ -15,6 +15,10 @@ import { AppModule } from './../src/app.module';
  *
  *   docker compose up -d postgres redis
  *   npx prisma migrate deploy && npx prisma generate
+ *
+ * No live-network dependency: registration enqueues settlement-wallet
+ * provisioning rather than awaiting two Stellar round trips inside the
+ * request, so this suite's timing tracks the database rather than testnet.
  */
 describe('Payment links (e2e)', () => {
   let app: INestApplication<App>;

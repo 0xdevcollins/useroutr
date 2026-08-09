@@ -33,6 +33,8 @@ import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MerchantSettlementService } from '../merchant/merchant-settlement.service';
+import { getQueueToken } from '@nestjs/bullmq';
+import { SETTLEMENT_PROVISION_QUEUE } from '../merchant/settlement-provision.constants';
 
 interface MockMerchant {
   id: string;
@@ -89,12 +91,15 @@ const mockNotificationsService = {
   notifyApiKeyCreated: jest.fn().mockResolvedValue(undefined),
 };
 
-// MerchantSettlementService stub — register() calls provision() in a
-// try/catch, so even a resolved Promise is enough to keep tests green.
-// Specific tests can override to assert provisioning was triggered or
-// to simulate a Stellar outage.
+// MerchantSettlementService stub. register() no longer calls provision()
+// directly — it enqueues — but the service is still injected for other paths.
 const mockSettlementService = {
   provision: jest.fn().mockResolvedValue({ stellarAddress: 'G_TEST_ADDR' }),
+};
+
+// The provisioning queue register() writes to instead of waiting on Stellar.
+const mockProvisionQueue = {
+  add: jest.fn().mockResolvedValue({ id: 'job_1' }),
 };
 
 describe('AuthService', () => {
@@ -106,6 +111,10 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: JwtService, useValue: mockJwtService },
+        {
+          provide: getQueueToken(SETTLEMENT_PROVISION_QUEUE),
+          useValue: mockProvisionQueue,
+        },
         {
           provide: NotificationsService,
           useValue: mockNotificationsService,
@@ -170,6 +179,39 @@ describe('AuthService', () => {
       expect(mockPrismaService.merchant.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ name: 'My Company' }) as object,
       });
+    });
+
+    it('enqueues settlement provisioning instead of waiting on Stellar', async () => {
+      // Provisioning makes two live Stellar round trips. Awaiting them here
+      // made every signup as slow as the network's worst moment.
+      await service.register({
+        name: 'Queue Co',
+        email: 'queue@example.com',
+        password: 'correct-horse-1',
+      });
+
+      expect(mockProvisionQueue.add).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ merchantId: expect.any(String) }),
+        expect.anything(),
+      );
+      expect(mockSettlementService.provision).not.toHaveBeenCalled();
+    });
+
+    it('still registers the merchant when the queue is unreachable', async () => {
+      // Redis being down must not cost someone their account; the dashboard
+      // retry is the backstop.
+      mockProvisionQueue.add.mockRejectedValueOnce(new Error('redis down'));
+
+      await expect(
+        service.register({
+          name: 'Resilient Co',
+          email: 'resilient@example.com',
+          password: 'correct-horse-1',
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({ accessToken: expect.any(String) }),
+      );
     });
 
     it('should throw ConflictException if email exists', async () => {
