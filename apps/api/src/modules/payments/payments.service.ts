@@ -33,10 +33,18 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import {
+  SETTLEMENT_HOLD_QUEUE,
+  RELEASE_HOLD_JOB,
+  HOLD_STATE_HELD,
+  HOLD_STATE_RELEASED,
+  HOLD_JOB_CLEANUP,
+} from './settlement-hold.constants';
+import {
   CCTP_OBSERVE_QUEUE,
   CCTP_OBSERVE_JOB,
   type CctpObserveJobData,
 } from './cctp.constants';
+import { EscrowService } from '../escrow/escrow.service';
 import { ethers } from 'ethers';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFiltersDto } from './dto/payment-filters.dto';
@@ -152,6 +160,8 @@ export class PaymentsService implements OnModuleInit {
     private readonly linksService: LinksService,
     private readonly cctpService: CctpService,
     @InjectQueue(CCTP_OBSERVE_QUEUE) private readonly cctpQueue: Queue,
+    @InjectQueue(SETTLEMENT_HOLD_QUEUE) private readonly holdQueue: Queue,
+    private readonly escrowService: EscrowService,
     private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
   ) {
@@ -263,6 +273,29 @@ export class PaymentsService implements OnModuleInit {
     const currency = payment.destAsset || payment.sourceAsset;
     if (!amount || !currency) return;
 
+    // Merchants who opted into a settlement hold do not get spendable funds at
+    // completion; the credit lands in `reservedAmount` and is moved across when
+    // the hold ends.
+    //
+    // Whether that hold is backed by the escrow contract or by this ledger
+    // alone depends on the payer. A Stellar-native payer has an account that
+    // can authorize `lock` and an address the contract can refund to on a
+    // dispute. A CCTP payer has neither — their funds arrive minted by Circle
+    // and their wallet is on another chain entirely — so for those payments
+    // this is a policy hold, and describing it as escrow would claim a
+    // guarantee the chain is not making. `payment.escrowId` records which
+    // backing a payment actually received.
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: payment.merchantId },
+      select: { settlementHoldEnabled: true, settlementHoldSeconds: true },
+    });
+    const held = merchant?.settlementHoldEnabled === true;
+    const escrowBacked = held && this.canBeEscrowBacked(payment);
+    const holdSeconds = merchant?.settlementHoldSeconds ?? 604_800;
+    const releaseAt = held
+      ? new Date(Date.now() + holdSeconds * 1000)
+      : undefined;
+
     try {
       await this.prisma.$transaction([
         this.prisma.merchantLedgerEntry.create({
@@ -272,7 +305,11 @@ export class PaymentsService implements OnModuleInit {
             type: MerchantLedgerEntryType.CREDIT,
             amount,
             currency,
-            description: 'Payment completion credit',
+            description: !held
+              ? 'Payment completion credit'
+              : escrowBacked
+                ? 'Payment completion credit (held on-chain in escrow)'
+                : 'Payment completion credit (held for settlement window)',
           },
         }),
         this.prisma.merchantBalance.upsert({
@@ -284,14 +321,33 @@ export class PaymentsService implements OnModuleInit {
           },
           create: {
             merchantId: payment.merchantId,
-            availableAmount: amount,
+            availableAmount: held ? 0 : amount,
+            reservedAmount: held ? amount : 0,
             currency,
           },
-          update: {
-            availableAmount: { increment: amount },
-          },
+          update: held
+            ? { reservedAmount: { increment: amount } }
+            : { availableAmount: { increment: amount } },
         }),
+        // Stamped in the same transaction as the credit. If this row said HELD
+        // but the balance had not moved (or the reverse), the release job would
+        // work from a lie.
+        ...(held
+          ? [
+              this.prisma.payment.update({
+                where: { id: payment.id },
+                data: {
+                  escrowState: HOLD_STATE_HELD,
+                  escrowReleaseAt: releaseAt,
+                },
+              }),
+            ]
+          : []),
       ]);
+
+      if (held && releaseAt) {
+        await this.enqueueHoldRelease(payment.id, releaseAt);
+      }
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -304,6 +360,132 @@ export class PaymentsService implements OnModuleInit {
       }
       throw err;
     }
+  }
+
+  /**
+   * Schedule the release. A delayed job rather than a poll: the window is known
+   * the moment the hold starts, so there is nothing to discover by sweeping.
+   * `reconcileSettlementHolds` covers jobs lost to a restart.
+   */
+  private async enqueueHoldRelease(
+    paymentId: string,
+    releaseAt: Date,
+  ): Promise<void> {
+    const delay = Math.max(0, releaseAt.getTime() - Date.now());
+
+    // BullMQ ignores add() while a job with this id exists in any state,
+    // including completed ones retained by removeOnComplete.
+    await this.holdQueue.remove(`hold-${paymentId}`).catch(() => undefined);
+
+    await this.holdQueue.add(
+      RELEASE_HOLD_JOB,
+      { paymentId },
+      { jobId: `hold-${paymentId}`, delay, attempts: 1, ...HOLD_JOB_CLEANUP },
+    );
+  }
+
+  /**
+   * Re-enqueue holds whose job did not survive a restart, and release any whose
+   * window elapsed while we were down. Without this a redeploy at the wrong
+   * moment strands a merchant's funds in `reservedAmount` indefinitely.
+   */
+  async reconcileSettlementHolds(): Promise<number> {
+    const pending = await this.prisma.payment.findMany({
+      where: { escrowState: HOLD_STATE_HELD },
+      select: { id: true, escrowReleaseAt: true },
+    });
+
+    for (const p of pending) {
+      await this.enqueueHoldRelease(p.id, p.escrowReleaseAt ?? new Date());
+    }
+    return pending.length;
+  }
+
+  /**
+   * Release one held payment. Idempotent: the HELD → RELEASED transition is
+   * conditional, so a retried or duplicated job cannot credit twice.
+   */
+  async releaseSettlementHold(paymentId: string): Promise<void> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment || payment.escrowState !== HOLD_STATE_HELD) return;
+
+    // Escrow-backed holds must come off the chain first. If that fails the
+    // ledger stays held — releasing spendable balance the contract has not
+    // released would be inventing money.
+    if (payment.escrowId) {
+      await this.escrowService.autoRelease(payment.escrowId);
+    }
+
+    const claimed = await this.prisma.payment.updateMany({
+      where: { id: paymentId, escrowState: HOLD_STATE_HELD },
+      data: { escrowState: HOLD_STATE_RELEASED },
+    });
+    if (claimed.count === 0) return;
+
+    await this.releaseEscrowedBalance(payment);
+  }
+
+  /**
+   * Whether this payment's funds can actually be held in the escrow contract.
+   *
+   * Only a Stellar-native payer qualifies. The contract's `lock` pulls from the
+   * payer and requires that account's signature, and a dispute resolved in the
+   * payer's favour pays the address stored as `payer` — so a payer who has no
+   * Stellar account can neither fund the escrow nor be refunded by it. Locking
+   * a CCTP payment with our own holding account as `payer` would mean a
+   * "refund" landing back with us, which is not payer protection.
+   */
+  private canBeEscrowBacked(payment: Payment): boolean {
+    return (payment.sourceChain ?? '').toLowerCase() === 'stellar';
+  }
+
+  /**
+   * Move a held credit from reserved to spendable. Called once the escrow
+   * contract reports the funds released — never on a timer of our own, because
+   * the chain is what actually governs whether the merchant has the money.
+   *
+   * `payerAmount` is non-zero when a dispute was resolved as a partial or full
+   * refund: that share never becomes the merchant's, so it is debited rather
+   * than released.
+   */
+  async releaseEscrowedBalance(
+    payment: Payment,
+    opts?: { payerAmount?: Prisma.Decimal | number },
+  ): Promise<void> {
+    const amount = payment.destAmount ?? payment.sourceAmount;
+    const currency = payment.destAsset || payment.sourceAsset;
+    if (!amount || !currency) return;
+
+    const refunded = new Prisma.Decimal(opts?.payerAmount ?? 0);
+    const toMerchant = new Prisma.Decimal(amount).minus(refunded);
+
+    await this.prisma.$transaction([
+      this.prisma.merchantBalance.update({
+        where: {
+          merchantId_currency: { merchantId: payment.merchantId, currency },
+        },
+        data: {
+          reservedAmount: { decrement: amount },
+          availableAmount: { increment: toMerchant },
+        },
+      }),
+      ...(refunded.isZero()
+        ? []
+        : [
+            this.prisma.merchantLedgerEntry.create({
+              data: {
+                merchantId: payment.merchantId,
+                paymentId: payment.id,
+                type: MerchantLedgerEntryType.ESCROW_REFUND,
+                amount: refunded,
+                currency,
+                description: 'Escrow dispute resolved in payer favour',
+              },
+            }),
+          ]),
+    ]);
   }
 
   async findExpiredLocked(): Promise<Payment[]> {

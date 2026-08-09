@@ -18,6 +18,17 @@ model Merchant {
   id                String         @id @default(cuid())
   name              String
   email             String         @unique
+  // Settlement hold opt-in. Off by default: turning it on delays the
+  // merchant's own access to funds, so it is theirs to choose.
+  //
+  // Deliberately NOT called "escrow". Only a Stellar-native payer's funds can
+  // be held in the escrow contract — a CCTP payer has no Stellar account to
+  // sign a lock with, and no address the contract could refund to. For those
+  // payments this is a ledger hold and nothing more, and the name should not
+  // imply a guarantee the chain is not making. `Payment.escrowId` records
+  // which backing a given payment actually got.
+  settlementHoldEnabled Boolean    @default(false)
+  settlementHoldSeconds Int        @default(604800) // 7 days
   passwordHash      String
   emailVerifiedAt   DateTime?
   verificationCodeHash      String?
@@ -170,6 +181,15 @@ model Payment {
   // confirms; populated by the cctp module before the destination mint.
   cctpNonce       String?
   cctpAttestation String?
+  // Soroban escrow. Set only when the hold is actually backed on-chain, which
+  // today means a Stellar-native payer. Null means the funds are held in the
+  // ledger alone — the distinction matters, so it is recorded per payment
+  // rather than inferred. `escrowId` is the contract's 32-byte id as hex;
+  // state mirrors EscrowState on-chain so the dashboard does not have to query
+  // Soroban to render a held balance. The chain is authoritative.
+  escrowId        String?        @unique
+  escrowState     String?
+  escrowReleaseAt DateTime?
   // Idempotency
   idempotencyKey  String?        @unique
   // Metadata
@@ -433,6 +453,9 @@ enum MerchantLedgerEntryType {
   CREDIT
   PAYOUT_DEBIT
   PAYOUT_RELEASE
+  // An escrow dispute resolved wholly or partly in the payer's favour: the
+  // held credit never becomes the merchant's, so it is debited back out.
+  ESCROW_REFUND
 }
 
 // ── Webhooks ──────────────────────────────────────────────────
