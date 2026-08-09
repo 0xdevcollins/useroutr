@@ -35,8 +35,23 @@ export function WithdrawModal({
   // Mirrors the server's StrKey check closely enough to catch a typo before a
   // round trip, without pretending to be authoritative.
   const addressLooksValid = /^G[A-Z2-7]{55}$/.test(destinationAddress.trim());
-  const amountLooksValid =
-    amount.trim() === "all" || /^\d+(\.\d{1,7})?$/.test(amount.trim());
+  // The shape check alone accepts "0" and "0.0000000". Stellar rejects a
+  // zero-amount payment, so submitting one costs a round trip and returns a
+  // protocol error that says nothing about what the merchant did wrong.
+  const trimmedAmount = amount.trim();
+  const amountIsWellFormed =
+    trimmedAmount === "all" || /^\d+(\.\d{1,7})?$/.test(trimmedAmount);
+  const amountIsPositive =
+    trimmedAmount === "all" || Number(trimmedAmount) > 0;
+  const amountLooksValid = amountIsWellFormed && amountIsPositive;
+  const amountError =
+    trimmedAmount !== "" && amountIsWellFormed && !amountIsPositive
+      ? "Enter an amount greater than zero."
+      : null;
+
+  // Deliberately no client-side balance check: the balance shown here can be
+  // stale, and refusing a withdrawal against a stale number is worse than the
+  // server refusing it against the real one.
   const canSubmit = addressLooksValid && amountLooksValid;
 
   const submit = () => {
@@ -115,6 +130,9 @@ export function WithdrawModal({
           placeholder='e.g. 100.50, or "all"'
           className="mt-1 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm"
         />
+        {amountError && (
+          <p className="mt-1 text-xs text-red-600">{amountError}</p>
+        )}
 
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
           <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-600" />
