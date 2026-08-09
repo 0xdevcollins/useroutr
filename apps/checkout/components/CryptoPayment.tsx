@@ -21,8 +21,12 @@ import { api, ApiError } from "@/lib/api";
 import {
   useCryptoSelect,
   type CryptoSelectResponse,
+  isEvmSelect,
+  type EvmCryptoSelectResponse,
 } from "@/hooks/useCryptoSelect";
 import { useCryptoStatus } from "@/hooks/useCryptoStatus";
+import { useRouter } from "next/navigation";
+import { StellarPayment } from "@/components/StellarPayment";
 
 /**
  * Crypto payment via Circle CCTP V2 (EVM → Stellar). The customer:
@@ -63,7 +67,12 @@ export function CryptoPayment({
   merchantCurrency,
 }: CryptoPaymentProps) {
   const [selectedChain, setSelectedChain] = useState<SupportedChainId>("base");
-  const [quote, setQuote] = useState<CryptoSelectResponse | null>(null);
+  const [quote, setQuote] = useState<EvmCryptoSelectResponse | null>(null);
+  // Stellar is a source chain but not a CCTP one: no bridge, no calldata, a
+  // different wallet. Tracked separately so the EVM state machine below stays
+  // exactly as it was.
+  const [stellarSelected, setStellarSelected] = useState(false);
+  const router = useRouter();
   const [step, setStep] = useState<
     "pick" | "approving" | "burning" | "submitted" | "done" | "failed"
   >("pick");
@@ -107,6 +116,11 @@ export function CryptoPayment({
     setErrorMsg(null);
     try {
       const result = await select.mutateAsync({ sourceChain: selectedChain });
+      // Narrow once here rather than at every `quote.wallet` access below.
+      // A Stellar quote reaching this component would be a routing bug.
+      if (!isEvmSelect(result)) {
+        throw new Error("This chain does not use the EVM payment flow.");
+      }
       setQuote(result);
       // Switch wallet to the chain the quote targets — saves a manual click
       // in MetaMask. The user can decline; we just won't auto-trigger sign.
@@ -264,8 +278,8 @@ export function CryptoPayment({
         Pay with crypto
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Pay in USDC on the chain of your choice. Settles on Stellar in 8–20
-        seconds via Circle&apos;s CCTP V2.
+        Pay in USDC from the chain of your choice. Already on Stellar? That
+        route skips the bridge entirely.
       </p>
 
       {/* Chain picker */}
@@ -274,16 +288,31 @@ export function CryptoPayment({
           Send USDC from
         </p>
         <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setStellarSelected(true);
+              setQuote(null);
+            }}
+            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              stellarSelected
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-transparent text-foreground hover:border-primary/40 hover:bg-primary/5"
+            }`}
+          >
+            Stellar
+          </button>
           {SUPPORTED_CHAINS.map((c) => (
             <button
               key={c.id}
               type="button"
               onClick={() => {
+                setStellarSelected(false);
                 setSelectedChain(c.id);
                 setQuote(null); // invalidate stale quote on chain change
               }}
               className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                selectedChain === c.id
+                !stellarSelected && selectedChain === c.id
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border bg-transparent text-foreground hover:border-primary/40 hover:bg-primary/5"
               }`}
@@ -294,8 +323,19 @@ export function CryptoPayment({
         </div>
       </div>
 
+      {/* Stellar-native: a different wallet and no bridge, so the CCTP flow
+          below is replaced rather than reused. */}
+      {stellarSelected && (
+        <div className="mt-4">
+          <StellarPayment
+            paymentId={paymentId}
+            onCompleted={() => router.push(`/${paymentId}/confirm`)}
+          />
+        </div>
+      )}
+
       {/* Quote display */}
-      {quote && (
+      {!stellarSelected && quote && (
         <div className="mt-4 rounded-lg border border-border bg-muted/40 p-4 font-mono text-sm">
           <div className="flex items-baseline justify-between">
             <span className="text-muted-foreground">You send</span>
