@@ -116,6 +116,90 @@ export class EscrowService {
     return Buffer.from(escrowId).toString('hex');
   }
 
+  /**
+   * Build an unsigned `lock` transaction for the payer to sign themselves.
+   *
+   * This is the shape that makes the contract's guarantee real. When the payer
+   * is the one who signs, their own address is recorded as the escrow's
+   * `payer` — so a dispute resolved in their favour pays *them*, not us. Locking
+   * with our holding account as payer (the only option for a CCTP payer, who
+   * has no Stellar account) means a "refund" lands back with Useroutr and the
+   * rest is a promise.
+   *
+   * Returned as XDR because we cannot sign for the payer and should not want
+   * to: the whole point is that moving their money requires their key.
+   */
+  async buildLockTransaction(params: {
+    payerAddress: string;
+    merchantAddress: string;
+    token: string;
+    amount: bigint;
+    paymentId: string;
+    releaseAt: Date;
+  }): Promise<{ xdr: string; networkPassphrase: string }> {
+    this.assertConfigured();
+    const arbiter = this.relayKeypair as StellarSdk.Keypair;
+
+    if (
+      params.payerAddress === params.merchantAddress ||
+      params.payerAddress === arbiter.publicKey()
+    ) {
+      // The contract rejects these, but failing here costs a round trip
+      // instead of a reverted transaction the payer has already signed.
+      throw new Error(
+        'payer must differ from both the merchant and the arbiter',
+      );
+    }
+
+    const contract = new StellarSdk.Contract(this.contractId);
+    const source = await this.sorobanServer.getAccount(params.payerAddress);
+
+    const tx = new StellarSdk.TransactionBuilder(source, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(
+        contract.call(
+          'lock',
+          new StellarSdk.Address(params.payerAddress).toScVal(),
+          new StellarSdk.Address(params.merchantAddress).toScVal(),
+          new StellarSdk.Address(arbiter.publicKey()).toScVal(),
+          new StellarSdk.Address(params.token).toScVal(),
+          StellarSdk.nativeToScVal(params.amount, { type: 'i128' }),
+          StellarSdk.nativeToScVal(Buffer.from(params.paymentId, 'utf8'), {
+            type: 'bytes',
+          }),
+          StellarSdk.nativeToScVal(
+            BigInt(Math.floor(params.releaseAt.getTime() / 1000)),
+            { type: 'u64' },
+          ),
+        ),
+      )
+      .setTimeout(300)
+      .build();
+
+    // Simulating server-side means the payer's wallet is handed a transaction
+    // with footprint and resource fees already attached, and a lock that would
+    // revert — a duplicate payment, a paused contract — fails here rather than
+    // after they have approved it.
+    const simulated = await this.sorobanServer.simulateTransaction(tx);
+    if (StellarSdk.rpc.Api.isSimulationError(simulated)) {
+      throw new Error(`escrow lock would fail: ${simulated.error}`);
+    }
+
+    const prepared = StellarSdk.rpc
+      .assembleTransaction(
+        tx,
+        simulated as StellarSdk.rpc.Api.SimulateTransactionSuccessResponse,
+      )
+      .build();
+
+    return {
+      xdr: prepared.toXDR(),
+      networkPassphrase: this.networkPassphrase,
+    };
+  }
+
   /** Arbiter releases the full amount to the merchant. */
   async release(escrowId: string): Promise<void> {
     this.assertConfigured();

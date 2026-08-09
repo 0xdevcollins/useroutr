@@ -126,6 +126,7 @@ describe('PaymentsService', () => {
 
   const escrowService = {
     autoRelease: jest.fn(),
+    buildLockTransaction: jest.fn(),
     isConfigured: jest.fn().mockReturnValue(true),
   };
 
@@ -421,6 +422,111 @@ describe('PaymentsService', () => {
       await expect(service.selectCrypto('pay_123', 'stellar')).rejects.toThrow(
         /settlement address/i,
       );
+    });
+  });
+
+  describe('buildStellarEscrowTx', () => {
+    // Restored after this block so later describes see the original stub.
+    afterAll(() => {
+      configService.get.mockImplementation((key: string) =>
+        key === 'STRIPE_WEBHOOK_SECRET' ? 'whsec_test' : undefined,
+      );
+    });
+
+    const PAYER = 'GBBN5WUDNH5P7ZG3CKJIWZ6CXQY2PXL23H2K36QIE53UGAXWZDWJP3D7';
+    const base = {
+      ...paymentRecord,
+      status: 'QUOTE_LOCKED',
+      sourceChain: 'stellar',
+      destAmount: new Prisma.Decimal(50),
+      merchant: {
+        id: 'merchant_123',
+        settlementAddress:
+          'GDRVV7TZDPEQ2BFZOZDS2B572IWPPOZRR4IJUXJGNUCYOY523RZ76IDV',
+        settlementHoldEnabled: true,
+        settlementHoldSeconds: 604800,
+      },
+    };
+
+    beforeEach(() => {
+      prisma.payment.findUnique.mockResolvedValue(base);
+      // Keep the outer mock's other keys: jest.clearAllMocks() clears calls
+      // but not implementations, so an override here would leak into every
+      // describe that runs after this one.
+      configService.get.mockImplementation((k: string) => {
+        if (k === 'STELLAR_USDC_SAC_TESTNET') return 'CUSDCSAC';
+        if (k === 'STRIPE_WEBHOOK_SECRET') return 'whsec_test';
+        return undefined;
+      });
+      escrowService.buildLockTransaction.mockResolvedValue({
+        xdr: 'AAAA...',
+        networkPassphrase: 'Test SDF Network ; September 2015',
+      });
+    });
+
+    it('records the payer as the escrow payer, not us', async () => {
+      // The whole reason this flow exists: a dispute must be able to refund
+      // the person who actually paid.
+      await service.buildStellarEscrowTx('pay_123', PAYER);
+
+      expect(escrowService.buildLockTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payerAddress: PAYER,
+          merchantAddress: base.merchant.settlementAddress,
+        }),
+      );
+    });
+
+    it('sets release_at from the merchant hold window', async () => {
+      const before = Date.now();
+      const res = await service.buildStellarEscrowTx('pay_123', PAYER);
+
+      const releaseAt = new Date(res.releaseAt).getTime();
+      expect(releaseAt).toBeGreaterThanOrEqual(before + 604800 * 1000 - 5000);
+    });
+
+    it('refuses a CCTP payer, who cannot be refunded by the contract', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...base,
+        sourceChain: 'base',
+      });
+
+      await expect(
+        service.buildStellarEscrowTx('pay_123', PAYER),
+      ).rejects.toThrow(/only available for Stellar-native/i);
+      expect(escrowService.buildLockTransaction).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the merchant has not opted in', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...base,
+        merchant: { ...base.merchant, settlementHoldEnabled: false },
+      });
+
+      await expect(
+        service.buildStellarEscrowTx('pay_123', PAYER),
+      ).rejects.toThrow(/has not enabled a settlement hold/i);
+    });
+
+    it('refuses a payment that is not awaiting funds', async () => {
+      prisma.payment.findUnique.mockResolvedValue({
+        ...base,
+        status: 'COMPLETED',
+      });
+
+      await expect(
+        service.buildStellarEscrowTx('pay_123', PAYER),
+      ).rejects.toThrow(/cannot start an escrow/i);
+    });
+
+    it('says which variable is missing when the USDC contract id is unset', async () => {
+      configService.get.mockImplementation((k: string) =>
+        k === 'STRIPE_WEBHOOK_SECRET' ? 'whsec_test' : undefined,
+      );
+
+      await expect(
+        service.buildStellarEscrowTx('pay_123', PAYER),
+      ).rejects.toThrow(/STELLAR_USDC_SAC_TESTNET/);
     });
   });
 
