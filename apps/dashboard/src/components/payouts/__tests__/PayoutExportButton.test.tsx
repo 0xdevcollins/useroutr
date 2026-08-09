@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { PayoutExportButton } from '../PayoutExportButton'
 import type { Payout } from '@/hooks/usePayouts'
@@ -44,15 +44,44 @@ describe('PayoutExportButton', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    // Mock document.createElement and related DOM methods
+    // Stub only the download anchor the export handler builds. Testing
+    // Library's render() also goes through document.createElement and
+    // document.body.appendChild to mount its container, so intercepting every
+    // call — as this previously did — handed React a plain object as its root
+    // and failed all five tests with "Target container is not a DOM element".
     const mockLink = {
       setAttribute: vi.fn(),
       click: vi.fn(),
-      style: {},
-    }
-    vi.spyOn(document, 'createElement').mockReturnValue(mockLink as unknown as HTMLAnchorElement)
-    vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink as unknown as Node)
-    vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockLink as unknown as Node)
+      style: {} as CSSStyleDeclaration,
+    } as unknown as HTMLAnchorElement
+
+    const realCreateElement = document.createElement.bind(document)
+    const realAppendChild = document.body.appendChild.bind(document.body)
+    const realRemoveChild = document.body.removeChild.bind(document.body)
+
+    vi.spyOn(document, 'createElement').mockImplementation(((
+      tagName: string,
+      options?: ElementCreationOptions,
+    ) =>
+      tagName === 'a'
+        ? mockLink
+        : realCreateElement(tagName, options)) as typeof document.createElement)
+
+    vi.spyOn(document.body, 'appendChild').mockImplementation((<T extends Node>(node: T) =>
+      node === (mockLink as unknown as Node)
+        ? node
+        : realAppendChild(node)) as typeof document.body.appendChild)
+
+    vi.spyOn(document.body, 'removeChild').mockImplementation((<T extends Node>(node: T) =>
+      node === (mockLink as unknown as Node)
+        ? node
+        : realRemoveChild(node)) as typeof document.body.removeChild)
+  })
+
+  afterEach(() => {
+    // The spies above wrap the real DOM methods; leaving them installed would
+    // stack another layer on the next beforeEach.
+    vi.restoreAllMocks()
   })
 
   it('renders export button', () => {

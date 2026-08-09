@@ -187,6 +187,34 @@ jobs:
         working-directory: packages/types
         run: npm test
 
+  # ── Test Dashboard ───────────────────────────────────────────────────────────
+  # A sibling of test-packages rather than another step inside it: the two share
+  # no setup beyond `npm ci`, and keeping them separate means a dashboard
+  # failure reads as a dashboard failure in the checks list.
+  #
+  # This suite existed for some time but ran nowhere, so it sat red on main —
+  # two files could not resolve @useroutr/ui at all (the vitest aliases pointed
+  # a directory too shallow), PayoutExportButton stubbed document.createElement
+  # for every tag and broke its own render container, and PayoutStatusBadge
+  # still asserted tone names the badge stopped emitting when it moved to
+  # BrandStatusBadge. None of that could surface until this job existed.
+  test-dashboard:
+    name: Test Dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run tests
+        working-directory: apps/dashboard
+        run: npm test
+
   # ── Build ────────────────────────────────────────────────────────────────────
   build:
     name: Build

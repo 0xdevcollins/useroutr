@@ -95,8 +95,14 @@ describe('BatchGroupHeader', () => {
   it('displays status breakdown', () => {
     render(<BatchGroupHeader {...defaultProps} />)
 
-    // Should show status counts
-    expect(screen.getByText('(1)')).toBeInTheDocument() // Each status appears
+    // The three payouts hold three distinct statuses, so the breakdown renders
+    // one chip per status, each at count 1. `getByText('(1)')` was the wrong
+    // query for that — it throws on the second match — and the comment beside
+    // it ("Each status appears") describes what getAllByText checks here.
+    expect(screen.getAllByText('(1)')).toHaveLength(3)
+    expect(screen.getByText('Completed')).toBeInTheDocument()
+    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
   it('calls onToggle when clicked', () => {

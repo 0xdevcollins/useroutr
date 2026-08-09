@@ -4,7 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode } from 'react'
 import { usePayouts, useRetryPayout, useCancelPayout } from '../usePayouts'
 
-// Mock the API module
+// Mock the API module.
+//
+// Paths are asserted unprefixed on purpose: `resolveApiBaseUrl` in
+// @useroutr/types owns the "/v1" segment, and `assertVersionlessPath` throws
+// outside production if a caller re-adds it. Mocking `api` bypasses both, so
+// these assertions are the only thing holding the hooks to that convention.
 vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
@@ -29,11 +34,14 @@ const createWrapper = () => {
   return Wrapper
 }
 
-describe('usePayouts', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+// File-scoped so the retry and cancel suites below also start from clean
+// spies. Scoped to `usePayouts` alone, the cancel assertion was passing while
+// inspecting a call list that still held the earlier retry call.
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
+describe('usePayouts', () => {
   it('fetches payouts with correct params', async () => {
     const mockResponse = {
       total: 2,
