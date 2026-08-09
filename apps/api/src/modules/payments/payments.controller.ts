@@ -209,6 +209,29 @@ export class CheckoutPaymentsController {
   }
 
   /**
+   * Build the escrow lock for a Stellar-native payer to sign.
+   *
+   * The payer's address arrives here rather than at select-crypto because they
+   * have not connected a wallet at that point, and the contract needs to record
+   * *their* address as the escrow's payer for a refund to be able to reach them.
+   */
+  @Post('checkout/:paymentId/stellar-escrow-tx')
+  stellarEscrowTx(
+    @Param('paymentId') paymentId: string,
+    @Body() body: { payerAddress: string },
+  ) {
+    if (!body?.payerAddress || !/^G[A-Z2-7]{55}$/.test(body.payerAddress)) {
+      throw new BadRequestException(
+        'payerAddress must be a Stellar public key (G...)',
+      );
+    }
+    return this.paymentsService.buildStellarEscrowTx(
+      paymentId,
+      body.payerAddress,
+    );
+  }
+
+  /**
    * Confirm a Stellar-native payment. The body carries only the tx hash —
    * where to look. What happened is read back from the ledger.
    */

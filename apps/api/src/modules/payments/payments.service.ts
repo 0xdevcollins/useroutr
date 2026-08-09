@@ -1058,6 +1058,89 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     return { status: PaymentStatus.COMPLETED, stellarTxHash: txHash };
   }
 
+  /**
+   * Build the escrow `lock` transaction for a Stellar-native payer to sign.
+   *
+   * Only offered when the merchant has opted into a settlement hold *and* the
+   * payer is on Stellar. Those are the conditions under which the contract's
+   * guarantee is real rather than nominal: the payer can authorize the lock,
+   * and a dispute has somewhere to refund them.
+   */
+  async buildStellarEscrowTx(
+    paymentId: string,
+    payerAddress: string,
+  ): Promise<{ xdr: string; networkPassphrase: string; releaseAt: string }> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { merchant: true },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    if (
+      payment.status !== PaymentStatus.PENDING &&
+      payment.status !== PaymentStatus.QUOTE_LOCKED
+    ) {
+      throw new ConflictException(
+        `Payment is in status ${payment.status}; cannot start an escrow`,
+      );
+    }
+    if (!this.canBeEscrowBacked(payment)) {
+      throw new BadRequestException(
+        'Escrow is only available for Stellar-native payments',
+      );
+    }
+    if (!payment.merchant.settlementHoldEnabled) {
+      throw new BadRequestException(
+        'This merchant has not enabled a settlement hold',
+      );
+    }
+
+    const merchantAddress = payment.merchant.settlementAddress ?? '';
+    const amount = payment.destAmount ?? payment.sourceAmount;
+    if (!merchantAddress || !amount) {
+      throw new BadRequestException('Payment is not ready for an escrow');
+    }
+
+    const releaseAt = new Date(
+      Date.now() + payment.merchant.settlementHoldSeconds * 1000,
+    );
+
+    const built = await this.escrowService.buildLockTransaction({
+      payerAddress,
+      merchantAddress,
+      token: this.stellarUsdcContractId(),
+      amount: this.toUsdcSubunits(amount),
+      paymentId: payment.id,
+      releaseAt,
+    });
+
+    // Recorded before the payer signs. If they sign and we never hear back,
+    // the window is still known and the escrow is still discoverable on-chain
+    // from the payment id — an unrecorded release_at would not be.
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { escrowReleaseAt: releaseAt },
+    });
+
+    return { ...built, releaseAt: releaseAt.toISOString() };
+  }
+
+  /** SAC contract id for USDC on the configured network. */
+  private stellarUsdcContractId(): string {
+    const isMainnet =
+      this.configService.get<string>('STELLAR_NETWORK')?.toLowerCase() ===
+      'mainnet';
+    const id = isMainnet
+      ? this.configService.get<string>('STELLAR_USDC_SAC_MAINNET')
+      : this.configService.get<string>('STELLAR_USDC_SAC_TESTNET');
+    if (!id) {
+      throw new BadRequestException(
+        `Escrow needs the USDC contract id: set STELLAR_USDC_SAC_${isMainnet ? 'MAINNET' : 'TESTNET'}`,
+      );
+    }
+    return id;
+  }
+
   async submitBurn(
     paymentId: string,
     sourceTxHash: string,
