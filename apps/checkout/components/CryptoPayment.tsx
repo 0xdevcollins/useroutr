@@ -374,7 +374,11 @@ export function CryptoPayment({
         </div>
       )}
 
-      {/* CTA */}
+      {/* CTA — EVM only. `StellarPayment` renders its own Freighter button, so
+          leaving this block unconditional put two live "Connect …" buttons on
+          the page at once whenever Stellar was selected, the second one wired
+          to a wallet that cannot pay on this route. */}
+      {!stellarSelected && (
       <div className="mt-5 space-y-2">
         {!isConnected ? (
           <button
@@ -421,6 +425,7 @@ export function CryptoPayment({
           </p>
         )}
       </div>
+      )}
     </div>
   );
 }
