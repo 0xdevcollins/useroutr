@@ -327,19 +327,24 @@ export class StellarService {
     // Sum every payment leg to this destination in the transaction: a wallet
     // may legitimately split one transfer across operations, and requiring a
     // single matching op would reject a valid payment.
-    const paid = operations
+    // Horizon types `op.type` as an enum, so it is widened to a string once
+    // rather than compared against literals eight times.
+    type PaymentLeg = {
+      type: string;
+      to?: string;
+      asset_code?: string;
+      amount?: string;
+    };
+    const PAID_TYPES = ['payment', 'path_payment_strict_receive'];
+
+    const paid = (operations as unknown as PaymentLeg[])
       .filter(
         (op) =>
-          (op.type === 'payment' ||
-            op.type === 'path_payment_strict_receive') &&
-          (op as unknown as { to?: string }).to === params.destination &&
-          (op as unknown as { asset_code?: string }).asset_code ===
-            params.assetCode,
+          PAID_TYPES.includes(String(op.type)) &&
+          op.to === params.destination &&
+          op.asset_code === params.assetCode,
       )
-      .reduce(
-        (sum, op) => sum + Number((op as unknown as { amount: string }).amount),
-        0,
-      );
+      .reduce((sum, op) => sum + Number(op.amount ?? 0), 0);
 
     if (paid <= 0) {
       return {
