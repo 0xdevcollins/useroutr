@@ -129,6 +129,32 @@ jobs:
         working-directory: apps/api
         run: npm run test:e2e
 
+  # ── Test Frontend ────────────────────────────────────────────────────────────
+  # Neither app's vitest suite ran anywhere until now, which is how a broken
+  # `@useroutr/ui` alias, a suite with no runner at all, and assertions still
+  # pinned to the pre-`/v1`-fix request paths all survived on main. Both apps
+  # share one job: they need no services, and the `npm ci` dominates the cost.
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Test Dashboard
+        working-directory: apps/dashboard
+        run: npm test
+
+      - name: Test Checkout
+        working-directory: apps/checkout
+        run: npm test
+
   # ── Test Soroban Contracts ───────────────────────────────────────────────────
   test-contracts-soroban:
     name: Test Soroban Contracts
