@@ -117,6 +117,18 @@ jobs:
         working-directory: apps/api
         run: npm test
 
+      # The e2e suite boots the whole AppModule against the Postgres and Redis
+      # services above, so it catches wiring the unit tests cannot — a module
+      # that fails to resolve, a migration that does not apply, a route that
+      # moved. It was previously not run anywhere, which is how a suite broken
+      # on main went unnoticed until someone ran it by hand.
+      #
+      # It stays in this job rather than a new one so it reuses the services
+      # and the install that are already paid for here.
+      - name: Run e2e tests
+        working-directory: apps/api
+        run: npm run test:e2e
+
   # ── Test Soroban Contracts ───────────────────────────────────────────────────
   test-contracts-soroban:
     name: Test Soroban Contracts

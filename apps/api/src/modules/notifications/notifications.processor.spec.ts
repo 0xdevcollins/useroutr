@@ -115,19 +115,32 @@ describe('NotificationsProcessor', () => {
     await expect(processor.process(job)).rejects.toThrow(errorMsg);
   });
 
-  it('should throw on missing RESEND_API_KEY', async () => {
+  it('constructs without RESEND_API_KEY, and fails only when sending', async () => {
+    // Deliberately changed: this used to throw at construction, which made
+    // transactional email a hard boot dependency for the whole API. Now the
+    // app starts and the error surfaces on the job that actually needs a key,
+    // where it is already logged and retried.
+    const module = await Test.createTestingModule({
+      providers: [
+        NotificationsProcessor,
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn(() => undefined) },
+        },
+      ],
+    }).compile();
+
+    const unconfigured = module.get<NotificationsProcessor>(
+      NotificationsProcessor,
+    );
+    expect(unconfigured).toBeDefined();
+
+    // The error must still reach whoever tries to send, naming the variable.
     await expect(
-      Test.createTestingModule({
-        providers: [
-          NotificationsProcessor,
-          {
-            provide: ConfigService,
-            useValue: {
-              get: jest.fn(() => undefined),
-            },
-          },
-        ],
-      }).compile(),
+      unconfigured.process({
+        name: 'sendEmail',
+        data: { to: 'user@example.com', subject: 's', html: '<p>h</p>' },
+      } as Job<EmailJobData>),
     ).rejects.toThrow('RESEND_API_KEY');
   });
 });
