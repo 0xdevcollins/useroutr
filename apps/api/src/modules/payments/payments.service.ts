@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  OnModuleDestroy,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -160,8 +161,9 @@ type PaymentWithRelations = Payment & {
 };
 
 @Injectable()
-export class PaymentsService implements OnModuleInit {
+export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PaymentsService.name);
+  private expiryTimer?: NodeJS.Timeout;
   private readonly CHECKOUT_URL =
     process.env.CHECKOUT_URL || 'https://checkout.useroutr.com';
   private readonly BANK_SESSION_TTL_HOURS = Number(
@@ -526,10 +528,30 @@ export class PaymentsService implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log('PaymentsService initialized. Starting expiry monitor.');
-    setInterval(() => {
+    this.expiryTimer = setInterval(() => {
       void this.processExpiredPending();
       void this.processExpiredBankSessions();
     }, 60_000);
+
+    // An interval keeps Node's event loop alive on its own. The HTTP server
+    // is what should decide how long the process lives, not a sweep timer, so
+    // this one does not get a vote.
+    this.expiryTimer.unref();
+  }
+
+  /**
+   * Stop the expiry monitor when the module goes down.
+   *
+   * The handle was previously discarded, so nothing could clear it. Every
+   * `app.close()` left a live 60s interval behind — which is why the e2e
+   * suites hung in teardown despite passing, and why `--forceExit` was
+   * papering over it.
+   */
+  onModuleDestroy() {
+    if (this.expiryTimer) {
+      clearInterval(this.expiryTimer);
+      this.expiryTimer = undefined;
+    }
   }
 
   async processExpiredPending() {
