@@ -127,11 +127,16 @@ describe('PaymentsService', () => {
   const escrowService = {
     autoRelease: jest.fn(),
     buildLockTransaction: jest.fn(),
+    computeEscrowId: jest.fn().mockResolvedValue('a1b2c3'),
+    getEscrow: jest.fn(),
     isConfigured: jest.fn().mockReturnValue(true),
   };
 
   const configService = {
-    get: jest.fn((key: string) => {
+    // Typed explicitly: inferring from the default implementation narrows the
+    // return to 'whsec_test' | undefined, and any describe that overrides it
+    // with another key then fails to typecheck.
+    get: jest.fn<string | undefined, [string]>((key: string) => {
       if (key === 'STRIPE_WEBHOOK_SECRET') return 'whsec_test';
       return undefined;
     }),
@@ -614,6 +619,88 @@ describe('PaymentsService', () => {
       await expect(
         service.submitStellarPayment('pay_123', HASH),
       ).rejects.toThrow(/cannot accept a Stellar payment/);
+    });
+  });
+
+  describe('submitStellarPayment — escrow-backed', () => {
+    const HASH = 'b'.repeat(64);
+    const MERCHANT = 'GDRVV7TZDPEQ2BFZOZDS2B572IWPPOZRR4IJUXJGNUCYOY523RZ76IDV';
+    const escrowed = {
+      ...paymentRecord,
+      status: 'QUOTE_LOCKED',
+      destAmount: new Prisma.Decimal(50),
+      stellarTxHash: null,
+      escrowId: 'a1b2c3',
+      merchant: { id: 'merchant_123', settlementAddress: MERCHANT },
+    };
+
+    beforeEach(() => {
+      prisma.payment.findUnique.mockResolvedValue(escrowed);
+      prisma.payment.findFirst.mockResolvedValue(null);
+      escrowService.getEscrow.mockResolvedValue({
+        state: 'Locked',
+        amount: 50_000_000n,
+        releaseAt: 0n,
+        disputedAt: 0n,
+        payer: 'GBBN5WUDNH5P7ZG3CKJIWZ6CXQY2PXL23H2K36QIE53UGAXWZDWJP3D7',
+        merchant: MERCHANT,
+      });
+    });
+
+    it('verifies against the contract, not a payment to the merchant', async () => {
+      // An escrowed payment pays the contract, so a destination check would
+      // never match — the contract's own entry is the authority.
+      const res = await service.submitStellarPayment('pay_123', HASH);
+
+      expect(res.status).toBe('COMPLETED');
+      expect(escrowService.getEscrow).toHaveBeenCalledWith('a1b2c3');
+      expect(stellarService.verifyIncomingPayment).not.toHaveBeenCalled();
+    });
+
+    it('refuses an escrow that is not actually Locked', async () => {
+      escrowService.getEscrow.mockResolvedValue({
+        state: 'Released',
+        amount: 50_000_000n,
+        releaseAt: 0n,
+        disputedAt: 0n,
+        payer: 'G...',
+        merchant: MERCHANT,
+      });
+
+      await expect(
+        service.submitStellarPayment('pay_123', HASH),
+      ).rejects.toThrow(/expected Locked/);
+    });
+
+    it('refuses an escrow naming a different merchant', async () => {
+      // Would mean the recorded id belongs to somebody else's escrow.
+      escrowService.getEscrow.mockResolvedValue({
+        state: 'Locked',
+        amount: 50_000_000n,
+        releaseAt: 0n,
+        disputedAt: 0n,
+        payer: 'G...',
+        merchant: 'GOTHERMERCHANTADDRESS',
+      });
+
+      await expect(
+        service.submitStellarPayment('pay_123', HASH),
+      ).rejects.toThrow(/does not name this merchant/);
+    });
+
+    it('refuses an escrow holding less than the payment', async () => {
+      escrowService.getEscrow.mockResolvedValue({
+        state: 'Locked',
+        amount: 1n,
+        releaseAt: 0n,
+        disputedAt: 0n,
+        payer: 'G...',
+        merchant: MERCHANT,
+      });
+
+      await expect(
+        service.submitStellarPayment('pay_123', HASH),
+      ).rejects.toThrow(/expected at least/);
     });
   });
 

@@ -244,12 +244,47 @@ export class EscrowService {
     );
   }
 
+  /**
+   * The escrow id the contract will derive for these parties.
+   *
+   * Same derivation `lock` uses, exposed by the contract so it can be known
+   * before the escrow exists — which is what lets us record the id when we
+   * build the transaction rather than having to find it afterwards.
+   */
+  async computeEscrowId(params: {
+    paymentId: string;
+    payerAddress: string;
+    merchantAddress: string;
+  }): Promise<string> {
+    this.assertConfigured();
+    const result = await this.invoke(
+      'compute_escrow_id',
+      [
+        StellarSdk.nativeToScVal(Buffer.from(params.paymentId, 'utf8'), {
+          type: 'bytes',
+        }),
+        new StellarSdk.Address(params.payerAddress).toScVal(),
+        new StellarSdk.Address(params.merchantAddress).toScVal(),
+      ],
+      this.relayKeypair as StellarSdk.Keypair,
+      { simulateOnly: true },
+    );
+
+    const raw = StellarSdk.scValToNative(
+      (result as StellarSdk.rpc.Api.GetSuccessfulTransactionResponse)
+        .returnValue as StellarSdk.xdr.ScVal,
+    ) as Buffer;
+    return Buffer.from(raw).toString('hex');
+  }
+
   /** Read the on-chain entry. The chain is authoritative over our mirror. */
   async getEscrow(escrowId: string): Promise<{
     state: string;
     amount: bigint;
     releaseAt: bigint;
     disputedAt: bigint;
+    payer: string;
+    merchant: string;
   }> {
     this.assertConfigured();
     const result = await this.invoke(
@@ -269,6 +304,8 @@ export class EscrowService {
       amount: BigInt(entry.amount as string | number | bigint),
       releaseAt: BigInt(entry.release_at as string | number | bigint),
       disputedAt: BigInt(entry.disputed_at as string | number | bigint),
+      payer: String(entry.payer),
+      merchant: String(entry.merchant),
     };
   }
 

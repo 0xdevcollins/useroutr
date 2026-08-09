@@ -1038,6 +1038,39 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    // An escrow-backed payment pays the contract, not the merchant, so a
+    // payment-to-destination check would never match. The contract's own entry
+    // is the authority: it says who the parties are, how much it holds, and
+    // that it is actually Locked rather than half-built.
+    if (payment.escrowId) {
+      const entry = await this.escrowService.getEscrow(payment.escrowId);
+
+      if (entry.state !== 'Locked') {
+        throw new BadRequestException(
+          `Escrow is in state ${entry.state}; expected Locked`,
+        );
+      }
+      if (entry.merchant !== expectedDestination) {
+        // Would mean the id we recorded belongs to a different escrow.
+        throw new BadRequestException(
+          'Escrow does not name this merchant as the beneficiary',
+        );
+      }
+      if (entry.amount < this.toUsdcSubunits(expectedAmount)) {
+        throw new BadRequestException(
+          `Escrow holds ${entry.amount}, expected at least ${this.toUsdcSubunits(expectedAmount)}`,
+        );
+      }
+
+      await this.updateStatus(paymentId, PaymentStatus.COMPLETED, {
+        stellarTxHash: txHash,
+        destTxHash: txHash,
+        escrowState: entry.state,
+      });
+
+      return { status: PaymentStatus.COMPLETED, stellarTxHash: txHash };
+    }
+
     const verified = await this.stellarService.verifyIncomingPayment({
       txHash,
       destination: expectedDestination,
@@ -1114,12 +1147,20 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       releaseAt,
     });
 
-    // Recorded before the payer signs. If they sign and we never hear back,
-    // the window is still known and the escrow is still discoverable on-chain
-    // from the payment id — an unrecorded release_at would not be.
+    // The contract derives the id from the payment id and the two parties, so
+    // it is knowable before the escrow exists. Recording it now — before the
+    // payer signs — means confirmation is a direct read rather than a search,
+    // and a payer who signs and disappears still leaves us able to find their
+    // escrow on-chain.
+    const escrowId = await this.escrowService.computeEscrowId({
+      paymentId: payment.id,
+      payerAddress,
+      merchantAddress,
+    });
+
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { escrowReleaseAt: releaseAt },
+      data: { escrowId, escrowReleaseAt: releaseAt },
     });
 
     return { ...built, releaseAt: releaseAt.toISOString() };
