@@ -838,6 +838,19 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     // would fail downstream and the customer's USDC would be stuck pending
     // an awkward refund.
     const recipient = payment.merchant.settlementAddress ?? '';
+
+    // A self-custodied settlement wallet is a Soroban contract (C...), not a
+    // classic account. That is not interchangeable: a classic payment
+    // operation cannot target a contract, and whether Circle's Forwarder can
+    // mint to one is unverified. The escrow path handles it — Soroban's
+    // Address accepts both — so say which flow is available rather than
+    // failing with a generic "not configured" that sends someone hunting.
+    if (this.isContractAddress(recipient)) {
+      throw new BadRequestException(
+        'This merchant settles to a self-custodied smart wallet, which currently supports escrow-backed Stellar payments only.',
+      );
+    }
+
     if (!recipient.startsWith('G') || recipient.length !== 56) {
       throw new BadGatewayException(
         'Merchant has not configured a Stellar settlement address yet. Crypto pay is unavailable for this merchant.',
@@ -1164,6 +1177,15 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     });
 
     return { ...built, releaseAt: releaseAt.toISOString() };
+  }
+
+  /**
+   * Soroban contract addresses are `C` + 55 base32 characters, the same shape
+   * as a classic `G` key but a different kind of thing entirely: contracts
+   * cannot receive classic payment operations.
+   */
+  private isContractAddress(address: string): boolean {
+    return /^C[A-Z2-7]{55}$/.test(address);
   }
 
   /** SAC contract id for USDC on the configured network. */
