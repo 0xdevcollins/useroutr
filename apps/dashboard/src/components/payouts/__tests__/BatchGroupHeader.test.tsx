@@ -95,8 +95,11 @@ describe('BatchGroupHeader', () => {
   it('displays status breakdown', () => {
     render(<BatchGroupHeader {...defaultProps} />)
 
-    // Should show status counts
-    expect(screen.getByText('(1)')).toBeInTheDocument() // Each status appears
+    // Three payouts with three distinct statuses, so each gets its own chip.
+    expect(screen.getAllByText('(1)')).toHaveLength(3)
+    expect(screen.getByText('Completed')).toBeInTheDocument()
+    expect(screen.getByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
   })
 
   it('calls onToggle when clicked', () => {

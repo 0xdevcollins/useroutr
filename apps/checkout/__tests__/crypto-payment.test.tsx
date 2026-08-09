@@ -1,67 +1,52 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { WagmiProvider } from 'wagmi';
+import type { ReactElement } from 'react';
 import { CryptoPayment } from '../components/CryptoPayment';
 import { QuoteCountdown } from '../components/QuoteCountdown';
 
-// Mock wagmi hooks
-jest.mock('wagmi', () => ({
-  useAccount: () => ({ address: null, chain: null, isConnected: false }),
-  useConnect: () => ({ connect: jest.fn(), connectors: [] }),
-  useSwitchChain: () => ({ switchChain: jest.fn() }),
-  useBalance: () => ({ data: null }),
-  useWriteContract: () => ({ writeContractAsync: jest.fn() }),
+// Wallet boundaries only. The two crypto hooks are left real so they exercise
+// their own query wiring against the mocked api client — `useCryptoSelect` is
+// a mutation and `useCryptoStatus` is disabled until the burn is submitted, so
+// neither fires on first render.
+vi.mock('wagmi', () => ({
+  useAccount: () => ({ address: null, isConnected: false }),
+  useChainId: () => 8453,
+  useSwitchChain: () => ({ switchChainAsync: vi.fn() }),
+  useSendTransaction: () => ({ sendTransactionAsync: vi.fn() }),
+  useWaitForTransactionReceipt: () => ({ refetch: vi.fn() }),
 }));
 
-// Mock viem
-jest.mock('viem', () => ({
-  formatUnits: jest.fn((value) => value),
-  parseUnits: jest.fn((value) => value),
+vi.mock('@rainbow-me/rainbowkit', () => ({
+  useConnectModal: () => ({ openConnectModal: vi.fn() }),
 }));
 
-// Mock @phosphor-icons/react
-jest.mock('@phosphor-icons/react', () => ({
-  Wallet: () => <div>Wallet Icon</div>,
-  ArrowRight: () => <div>Arrow Icon</div>,
-  Coins: () => <div>Coins Icon</div>,
-  Clock: () => <div>Clock Icon</div>,
-  AlertCircle: () => <div>Alert Icon</div>,
-  Timer: () => <div>Timer Icon</div>,
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
-// Mock hooks
-jest.mock('../hooks/useQuote', () => ({
-  useQuote: () => ({ data: null, isLoading: false, error: null }),
-}));
-
-jest.mock('../lib/api', () => ({
+vi.mock('@/lib/api', () => ({
   api: {
-    post: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
   },
+  ApiError: class ApiError extends Error {},
 }));
 
-const createTestQueryClient = () => new QueryClient({
-  defaultOptions: {
-    queries: { retry: false },
-    mutations: { retry: false },
-  },
-});
+const createTestQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
 
-const renderWithProviders = (component: React.ReactElement) => {
-  const queryClient = createTestQueryClient();
-  const wagmiConfig = {
-    chains: [],
-    transports: {},
-  };
-
-  return render(
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        {component}
-      </QueryClientProvider>
-    </WagmiProvider>
+const renderWithProviders = (component: ReactElement) =>
+  render(
+    <QueryClientProvider client={createTestQueryClient()}>
+      {component}
+    </QueryClientProvider>
   );
-};
 
 describe('CryptoPayment', () => {
   const defaultProps = {
@@ -72,57 +57,77 @@ describe('CryptoPayment', () => {
 
   it('renders crypto payment component', () => {
     renderWithProviders(<CryptoPayment {...defaultProps} />);
-    
+
     expect(screen.getByText('Pay with crypto')).toBeInTheDocument();
-    expect(screen.getByText('Select network')).toBeInTheDocument();
-    expect(screen.getByText('Select token')).toBeInTheDocument();
+    expect(screen.getByText('Send USDC from')).toBeInTheDocument();
   });
 
-  it('displays chain selection buttons', () => {
+  it('displays a button for every supported source chain', () => {
     renderWithProviders(<CryptoPayment {...defaultProps} />);
-    
-    expect(screen.getByText('ETH')).toBeInTheDocument();
-    expect(screen.getByText('BASE')).toBeInTheDocument();
-    expect(screen.getByText('BNB')).toBeInTheDocument();
+
+    // Stellar first — it is a source chain but not a CCTP one, so it sits
+    // outside SUPPORTED_CHAINS and renders its own button.
+    ['Stellar', 'Ethereum', 'Base', 'Arbitrum', 'Optimism', 'Avalanche'].forEach(
+      (label) => {
+        expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+      }
+    );
   });
 
-  it('displays token selection buttons for selected chain', () => {
+  it('defaults to Base and does not preselect Stellar', () => {
     renderWithProviders(<CryptoPayment {...defaultProps} />);
-    
-    expect(screen.getByText('USDC')).toBeInTheDocument();
-    expect(screen.getByText('USDT')).toBeInTheDocument();
-    expect(screen.getByText('ETH')).toBeInTheDocument();
+
+    // Token-level, not substring: every unselected button carries
+    // `hover:border-primary/40`, which a substring check would match.
+    expect(screen.getByRole('button', { name: 'Base' })).toHaveClass(
+      'border-primary'
+    );
+    expect(screen.getByRole('button', { name: 'Stellar' })).not.toHaveClass(
+      'border-primary'
+    );
+    expect(screen.getByRole('button', { name: 'Stellar' })).toHaveClass(
+      'border-border'
+    );
   });
 
   it('shows connect wallet button when not connected', () => {
     renderWithProviders(<CryptoPayment {...defaultProps} />);
-    
-    expect(screen.getByText('Connect wallet')).toBeInTheDocument();
+
+    expect(
+      screen.getByRole('button', { name: /Connect wallet/ })
+    ).toBeInTheDocument();
+  });
+
+  it('shows no quote until one is locked', () => {
+    renderWithProviders(<CryptoPayment {...defaultProps} />);
+
+    expect(screen.queryByText('Merchant gets')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Quote locked for/)).not.toBeInTheDocument();
   });
 });
 
 describe('QuoteCountdown', () => {
   it('renders countdown timer', () => {
     render(<QuoteCountdown />);
-    
+
     expect(screen.getByText('Quote expires in')).toBeInTheDocument();
   });
 
   it('shows expired state when time is up', () => {
     const expiresAt = new Date(Date.now() - 1000).toISOString(); // 1 second ago
-    
+
     render(<QuoteCountdown expiresAt={expiresAt} />);
-    
+
     expect(screen.getByText('Quote expired')).toBeInTheDocument();
     expect(screen.getByText('0:00')).toBeInTheDocument();
   });
 
   it('calls onExpired callback when time expires', async () => {
-    const onExpired = jest.fn();
+    const onExpired = vi.fn();
     const expiresAt = new Date(Date.now() - 1000).toISOString(); // 1 second ago
-    
+
     render(<QuoteCountdown expiresAt={expiresAt} onExpired={onExpired} />);
-    
+
     await waitFor(() => {
       expect(onExpired).toHaveBeenCalled();
     });

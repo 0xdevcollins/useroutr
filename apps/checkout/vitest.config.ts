@@ -2,10 +2,10 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// `packages/*` ship raw TypeScript — no build step, `main` points at
-// `src/index.ts`. Next handles that with `transpilePackages`; vitest has no
-// equivalent, so the workspace packages are aliased straight at their sources.
-// The trailing-slash entries keep subpath imports (`@useroutr/ui/globals.css`)
+// Mirrors apps/dashboard/vitest.config.ts. `packages/*` ship raw TypeScript
+// with no build step, so Next transpiles them via `transpilePackages` and
+// vitest needs the equivalent — aliases straight at the sources. The
+// trailing-slash entries keep subpath imports (`@useroutr/ui/globals.css`)
 // resolving instead of being rewritten onto the index file.
 const workspaceRoot = path.resolve(__dirname, '../..')
 
@@ -14,9 +14,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./test/setup.ts'],
+    // The app is not under `src/`, so scope the run to the test directory
+    // rather than letting vitest walk `.next/` and `node_modules`.
+    include: ['__tests__/**/*.test.{ts,tsx}'],
     alias: [
-      { find: '@/', replacement: path.resolve(__dirname, './src') + '/' },
+      // Matches the `@/*` -> `./*` mapping in tsconfig.json.
+      { find: '@/', replacement: __dirname + '/' },
       {
         find: /^@useroutr\/ui$/,
         replacement: path.join(workspaceRoot, 'packages/ui/src/index.ts'),
