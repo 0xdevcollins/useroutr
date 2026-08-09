@@ -97,6 +97,44 @@ async function bootstrap() {
   // makes a rolling deploy or a container stop drain instead of sever.
   app.enableShutdownHooks();
 
+  // Bound how long a graceful shutdown may take.
+  //
+  // Nest's hooks close queue workers via `worker.close()`, which is graceful:
+  // BullMQ waits for whatever job is mid-flight to finish. A job stuck against
+  // a slow third party — an email provider retrying, an RPC not answering —
+  // therefore holds the process open indefinitely, past the orchestrator's
+  // grace period, until it sends SIGKILL. A hard kill is strictly worse than
+  // a deliberate exit: it takes the process down at an arbitrary point with no
+  // log line explaining why.
+  //
+  // So the deadline is ours rather than the platform's. The timer is unref'd,
+  // so it only ever fires if something else is still holding the loop open —
+  // a clean shutdown exits before it matters.
+  //
+  // A job interrupted this way is not lost: BullMQ marks an active job with a
+  // dead worker as stalled and another worker picks it up, which is why
+  // forcing the exit is safe where abandoning writes would not be.
+  //
+  // The default is measured, not guessed. A healthy shutdown of this app takes
+  // ~21s — BullMQ's workers hold blocking Redis connections that take time to
+  // drain — so anything under that force-kills a shutdown that was going to
+  // succeed. 30s leaves headroom and matches the grace period Kubernetes and
+  // most platforms use by default, so the deadline is ours rather than
+  // arriving as an unexplained SIGKILL.
+  const shutdownGraceMs = Number(process.env.SHUTDOWN_GRACE_MS ?? 30_000);
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => {
+      const deadline = setTimeout(() => {
+        new Logger('Shutdown').error(
+          `Shutdown did not complete within ${shutdownGraceMs}ms — forcing exit. ` +
+            'A queue job was most likely still in flight; it will be retried as stalled.',
+        );
+        process.exit(1);
+      }, shutdownGraceMs);
+      deadline.unref();
+    });
+  }
+
   await app.listen(process.env.PORT ?? 3000);
 
   console.log(
