@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as StellarSdk from '@stellar/stellar-sdk';
+import { Prisma } from '@prisma/client';
 
 // ── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -297,6 +298,15 @@ export class StellarService {
     minAmount: string;
     assetCode: string;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
+    // A Soroban contract cannot receive a classic payment operation. Paying a
+    // smart-wallet merchant emits a token-contract `transfer` event instead,
+    // and looking for operations would find nothing — rejecting a payment
+    // that actually arrived. Failing closed on real money is the worst
+    // direction for this check to be wrong in.
+    if (/^C[A-Z2-7]{55}$/.test(params.destination)) {
+      return this.verifyContractPayment(params);
+    }
+
     let operations: StellarSdk.Horizon.ServerApi.OperationRecord[];
     try {
       const tx = await this.horizonServer
@@ -357,6 +367,97 @@ export class StellarService {
       return {
         ok: false,
         reason: `paid ${paid} ${params.assetCode}, expected at least ${required}`,
+      };
+    }
+
+    return { ok: true };
+  }
+
+  /**
+   * Verify a transfer into a Soroban contract address by reading the
+   * transaction's events.
+   *
+   * The Stellar Asset Contract emits `transfer` with topics
+   * [symbol "transfer", from, to, asset] and the amount as data. Amounts are
+   * in stroops here, unlike the decimal strings Horizon reports, so the
+   * comparison converts rather than trusting them to look alike.
+   */
+  private async verifyContractPayment(params: {
+    txHash: string;
+    destination: string;
+    minAmount: string;
+  }): Promise<{ ok: true } | { ok: false; reason: string }> {
+    let tx: StellarSdk.rpc.Api.GetTransactionResponse;
+    try {
+      tx = await this.sorobanServer.getTransaction(params.txHash);
+    } catch {
+      return { ok: false, reason: 'transaction not found on the ledger' };
+    }
+
+    if (tx.status !== StellarSdk.rpc.Api.GetTransactionStatus.SUCCESS) {
+      return { ok: false, reason: `transaction status is ${tx.status}` };
+    }
+
+    const events =
+      (
+        tx as unknown as {
+          resultMetaXdr?: {
+            v3?: () => {
+              sorobanMeta?: () => { events?: () => unknown[] } | null;
+            };
+          };
+        }
+      ).resultMetaXdr
+        ?.v3?.()
+        ?.sorobanMeta?.()
+        ?.events?.() ?? [];
+
+    const required = BigInt(
+      new Prisma.Decimal(params.minAmount).mul(10_000_000).toFixed(0),
+    );
+
+    let received = 0n;
+    for (const raw of events) {
+      try {
+        const ev = raw as {
+          body: () => {
+            v0: () => {
+              topics: () => StellarSdk.xdr.ScVal[];
+              data: () => StellarSdk.xdr.ScVal;
+            };
+          };
+        };
+        const v0 = ev.body().v0();
+        // scValToNative is typed `any`; name the shape we actually rely on
+        // rather than letting it leak through the rest of the loop.
+        const topics: unknown[] = v0
+          .topics()
+          .map((t): unknown => StellarSdk.scValToNative(t));
+
+        // [ 'transfer', from, to, asset ]
+        if (topics[0] !== 'transfer') continue;
+        if (String(topics[2]) !== params.destination) continue;
+
+        received += BigInt(
+          StellarSdk.scValToNative(v0.data()) as string | number | bigint,
+        );
+      } catch {
+        // A malformed or unrelated event is not a reason to reject the
+        // transaction; it is a reason to ignore that event.
+        continue;
+      }
+    }
+
+    if (received === 0n) {
+      return {
+        ok: false,
+        reason: `no transfer to ${params.destination} in this transaction`,
+      };
+    }
+    if (received < required) {
+      return {
+        ok: false,
+        reason: `transferred ${received} stroops, expected at least ${required}`,
       };
     }
 
