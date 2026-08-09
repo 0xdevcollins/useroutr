@@ -17,7 +17,11 @@ describe('MerchantSettlementService.withdraw', () => {
 
   const prisma = {
     merchantSettlementKey: { findUnique: jest.fn() },
-    settlementWithdrawal: { create: jest.fn(), update: jest.fn() },
+    settlementWithdrawal: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(),
+    },
   };
 
   const config = {
@@ -142,6 +146,72 @@ describe('MerchantSettlementService.withdraw', () => {
     await expect(
       service.withdraw('m1', { destinationAddress: DEST, amount: '0' }),
     ).rejects.toThrow(/greater than zero/);
+  });
+
+  it('managed path refuses a self-custodied wallet, pointing at prepare/submit', async () => {
+    prisma.merchantSettlementKey.findUnique.mockResolvedValue({
+      merchantId: 'm1',
+      stellarAddress: 'GSOURCE',
+      smartWalletAddress:
+        'CDKAIND4CJUC4SNVLSXS5CH5GOMNQPBU4F6I2DY4ZFNO7LKP4HM3YAIK',
+      managed: false,
+      encryptedSeed: null,
+    });
+    (service as unknown as { horizon: unknown }).horizon = {
+      loadAccount: jest
+        .fn()
+        .mockResolvedValueOnce({ balances: balances({ usdc: '50' }) })
+        .mockResolvedValueOnce({ balances: balances({ usdc: '0' }) }),
+    };
+
+    await expect(
+      service.withdraw('m1', { destinationAddress: DEST, amount: '10' }),
+    ).rejects.toThrow(/prepare\/submit/);
+  });
+
+  describe('submitWithdrawal', () => {
+    it('refuses a withdrawal id belonging to another merchant', async () => {
+      // Otherwise one merchant could broadcast against another's audit row.
+      prisma.settlementWithdrawal.findUnique.mockResolvedValue({
+        id: 'w1',
+        merchantId: 'someone-else',
+        status: 'prepared',
+      });
+
+      await expect(
+        service.submitWithdrawal('m1', 'w1', 'AAAA'),
+      ).rejects.toThrow(/not found/i);
+    });
+
+    it('refuses a withdrawal that was already submitted', async () => {
+      prisma.settlementWithdrawal.findUnique.mockResolvedValue({
+        id: 'w1',
+        merchantId: 'm1',
+        status: 'submitted',
+      });
+
+      await expect(
+        service.submitWithdrawal('m1', 'w1', 'AAAA'),
+      ).rejects.toThrow(/only a prepared withdrawal/i);
+    });
+
+    it('refuses an unparseable signed transaction', async () => {
+      prisma.settlementWithdrawal.findUnique.mockResolvedValue({
+        id: 'w1',
+        merchantId: 'm1',
+        status: 'prepared',
+      });
+      prisma.merchantSettlementKey.findUnique.mockResolvedValue({
+        merchantId: 'm1',
+        stellarAddress: 'GSOURCE',
+        smartWalletAddress: null,
+        managed: false,
+      });
+
+      await expect(
+        service.submitWithdrawal('m1', 'w1', 'not-xdr'),
+      ).rejects.toThrow(/not a valid transaction/i);
+    });
   });
 
   it('records a failed withdrawal rather than leaving no trace', async () => {
