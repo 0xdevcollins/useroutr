@@ -41,24 +41,34 @@ export function CancelConfirmationModal({
             </div>
             <AlertDialogTitle>Cancel Payout?</AlertDialogTitle>
           </div>
-          <AlertDialogDescription className="pt-2">
-            Are you sure you want to cancel this payout?
-            {recipientName && amount && currency && (
-              <div className="mt-2 rounded-lg bg-muted p-3 text-sm">
-                <span className="font-medium">{recipientName}</span>
-                <span className="text-muted-foreground"> — </span>
-                <span className="font-medium">
-                  {new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: currency,
-                  }).format(Number(amount))}
-                </span>
-              </div>
-            )}
-            <p className="mt-3 text-sm text-muted-foreground">
-              This action cannot be undone. The payout will be marked as cancelled and
-              the funds will remain in your account.
-            </p>
+          {/*
+            `asChild` so the description renders as a <div>. Radix renders
+            AlertDialogDescription as a <p> by default, and the payout summary
+            and the closing paragraph below are both block content — nesting
+            them in a <p> is invalid markup that React flags at runtime. Keeping
+            the whole block inside the description (rather than moving it out as
+            a sibling) is what keeps aria-describedby covering all of it.
+          */}
+          <AlertDialogDescription asChild className="pt-2">
+            <div>
+              <p>Are you sure you want to cancel this payout?</p>
+              {recipientName && amount && currency && (
+                <div className="mt-2 rounded-lg bg-muted p-3 text-sm">
+                  <span className="font-medium">{recipientName}</span>
+                  <span className="text-muted-foreground"> — </span>
+                  <span className="font-medium">
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: currency,
+                    }).format(Number(amount))}
+                  </span>
+                </div>
+              )}
+              <p className="mt-3">
+                This action cannot be undone. The payout will be marked as cancelled and
+                the funds will remain in your account.
+              </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
