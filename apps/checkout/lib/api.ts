@@ -1,4 +1,17 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333/v1";
+import { assertVersionlessPath, resolveApiBaseUrl } from "@useroutr/types";
+
+/**
+ * The version prefix lives here, not at call sites — the same rule the
+ * dashboard follows. This file used to read `NEXT_PUBLIC_API_URL` expecting it
+ * to *include* `/v1` while the dashboard read the same variable expecting it
+ * not to, so no single deployment value could satisfy both. Meanwhile four
+ * call sites in this app wrote `/v1/payments/...` on top of a base that
+ * already ended in `/v1`, and requested `/v1/v1/payments/...`.
+ */
+const BASE_URL = resolveApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL,
+  "http://localhost:3333",
+);
 
 interface RequestOptions {
   params?: Record<string, unknown>;
@@ -33,8 +46,11 @@ async function request<T>(
   path: string,
   options: RequestOptions & { body?: unknown } = {},
 ): Promise<T> {
+  // Fails loudly in development if a caller re-adds the version prefix.
+  assertVersionlessPath(path.startsWith("/") ? path : `/${path}`);
+
   // Use string concat rather than `new URL(path, BASE_URL)` so an absolute
-  // `path` like `/v1/links/abc` doesn't replace BASE_URL's pathname when
+  // `path` like `/links/abc` doesn't replace BASE_URL's pathname when
   // BASE_URL itself carries a path prefix (e.g. behind an ingress).
   const queryString = options.params
     ? "?" +

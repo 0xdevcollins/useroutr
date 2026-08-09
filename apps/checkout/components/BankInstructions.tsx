@@ -63,7 +63,7 @@ export function BankInstructions() {
 
       try {
         const result = await api.post<BankSessionResult>(
-          `/v1/payments/${paymentId}/bank-session`,
+          `/payments/${paymentId}/bank-session`,
         );
         if (cancelled) return;
         setSession(result.session);
@@ -93,7 +93,7 @@ export function BankInstructions() {
 
     try {
       const result = await api.post<BankSessionResult>(
-        `/v1/payments/${paymentId}/bank-session/regenerate`,
+        `/payments/${paymentId}/bank-session/regenerate`,
       );
       setSession(result.session);
       setExpired(Boolean(result.expired));
@@ -117,7 +117,7 @@ export function BankInstructions() {
     setError(null);
 
     try {
-      await api.post(`/v1/payments/${paymentId}/bank-sent`);
+      await api.post(`/payments/${paymentId}/bank-sent`);
       router.push(`/${paymentId}/confirm`);
     } catch {
       setError("Unable to mark transfer as sent. Please try again.");

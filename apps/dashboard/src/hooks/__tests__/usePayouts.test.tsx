@@ -61,7 +61,7 @@ describe('usePayouts', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(api.get).toHaveBeenCalledWith('/v1/payouts', {
+    expect(api.get).toHaveBeenCalledWith('/payouts', {
       params: { limit: 20, offset: 0 },
     })
     expect(result.current.data).toEqual(mockResponse)
@@ -88,7 +88,7 @@ describe('usePayouts', () => {
     })
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/v1/payouts', { params: filters })
+      expect(api.get).toHaveBeenCalledWith('/payouts', { params: filters })
     })
   })
 })
@@ -114,7 +114,7 @@ describe('useRetryPayout', () => {
 
     await result.current.mutateAsync('payout-1')
 
-    expect(api.post).toHaveBeenCalledWith('/v1/payouts/payout-1/retry')
+    expect(api.post).toHaveBeenCalledWith('/payouts/payout-1/retry')
   })
 })
 
@@ -139,6 +139,6 @@ describe('useCancelPayout', () => {
 
     await result.current.mutateAsync('payout-1')
 
-    expect(api.post).toHaveBeenCalledWith('/v1/payouts/payout-1/cancel')
+    expect(api.post).toHaveBeenCalledWith('/payouts/payout-1/cancel')
   })
 })

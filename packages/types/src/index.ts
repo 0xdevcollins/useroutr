@@ -1,3 +1,4 @@
+export * from './api-url';
 export * from './chain.types';
 export * from './chain-detector';
 export * from './payment.types';
