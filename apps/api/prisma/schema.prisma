@@ -61,6 +61,7 @@ model Merchant {
   settlementKey     MerchantSettlementKey?
   recipients        Recipient[]
   recurringPayouts  RecurringPayout[]
+  settlementWithdrawals SettlementWithdrawal[]
   balances          MerchantBalance[]
   ledgerEntries     MerchantLedgerEntry[]
 }
@@ -113,6 +114,25 @@ model MerchantSettlementKey {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   merchant        Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+}
+
+/// Out-of-band paper trail for every settlement withdrawal. Deliberately its
+/// own table rather than a MerchantLedgerEntry: this records money leaving
+/// custody, which is the event most likely to be disputed later, and it should
+/// survive independently of balance bookkeeping.
+model SettlementWithdrawal {
+  id                 String   @id @default(cuid())
+  merchantId         String
+  amount             Decimal  @db.Decimal(36, 18)
+  asset              String
+  destinationAddress String
+  stellarTxHash      String?
+  status             String
+  failureReason      String?
+  createdAt          DateTime @default(now())
+  merchant           Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, createdAt])
 }
 
 enum KybStatus {
