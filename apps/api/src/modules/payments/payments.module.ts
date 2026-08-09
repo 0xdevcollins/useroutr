@@ -10,6 +10,7 @@ import { CCTP_OBSERVE_QUEUE } from './cctp.constants';
 import { SETTLEMENT_HOLD_QUEUE } from './settlement-hold.constants';
 import { SettlementHoldProcessor } from './settlement-hold.processor';
 import { EscrowModule } from '../escrow/escrow.module';
+import { StellarModule } from '../stellar/stellar.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 import { QuotesModule } from '../quotes/quotes.module';
@@ -42,6 +43,9 @@ import { CctpModule } from '../cctp/cctp.module';
     BullModule.registerQueue({ name: CCTP_OBSERVE_QUEUE }),
     BullModule.registerQueue({ name: SETTLEMENT_HOLD_QUEUE }),
     EscrowModule,
+    // Stellar-native payments are verified against Horizon before they are
+    // accepted — see PaymentsService.submitStellarPayment.
+    StellarModule,
     NotificationsModule,
   ],
   providers: [PaymentsService, CctpProcessor, SettlementHoldProcessor],

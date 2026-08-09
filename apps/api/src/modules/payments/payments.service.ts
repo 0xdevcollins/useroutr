@@ -45,6 +45,7 @@ import {
   type CctpObserveJobData,
 } from './cctp.constants';
 import { EscrowService } from '../escrow/escrow.service';
+import { StellarService } from '../stellar/stellar.service';
 import { ethers } from 'ethers';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentFiltersDto } from './dto/payment-filters.dto';
@@ -178,6 +179,7 @@ export class PaymentsService implements OnModuleInit {
     @InjectQueue(CCTP_OBSERVE_QUEUE) private readonly cctpQueue: Queue,
     @InjectQueue(SETTLEMENT_HOLD_QUEUE) private readonly holdQueue: Queue,
     private readonly escrowService: EscrowService,
+    private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
   ) {
@@ -953,6 +955,87 @@ export class PaymentsService implements OnModuleInit {
    * hash is rejected — that suggests a double-burn, which is rare and
    * the customer should contact support.
    */
+  /**
+   * Confirm a Stellar-native payment by verifying it on the ledger.
+   *
+   * The client tells us *where to look*, never what happened. Everything that
+   * matters — destination, asset, amount, success — is read back from Horizon,
+   * so a caller who invents a hash, points at someone else's transaction, or
+   * underpays gets rejected rather than believed. The memo is not consulted
+   * for authorization: it is a convenience for humans reconciling later, and
+   * it is as attacker-supplied as the hash itself.
+   */
+  async submitStellarPayment(
+    paymentId: string,
+    txHash: string,
+  ): Promise<{ status: PaymentStatus; stellarTxHash: string }> {
+    this.logger.log(`Stellar payment submitted for ${paymentId} tx=${txHash}`);
+
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { merchant: true },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    // Idempotency: the same hash on an already-settled payment is a retry,
+    // not a problem. Checkout retries this on reconnect.
+    if (
+      payment.status === PaymentStatus.COMPLETED &&
+      payment.stellarTxHash === txHash
+    ) {
+      return { status: payment.status, stellarTxHash: txHash };
+    }
+
+    if (
+      payment.status !== PaymentStatus.PENDING &&
+      payment.status !== PaymentStatus.QUOTE_LOCKED
+    ) {
+      throw new ConflictException(
+        `Payment is in status ${payment.status}; cannot accept a Stellar payment`,
+      );
+    }
+
+    // One ledger transaction settles at most one payment. Without this, the
+    // same transfer could be presented against every open payment a merchant
+    // has and settle all of them.
+    const alreadyUsed = await this.prisma.payment.findFirst({
+      where: { stellarTxHash: txHash, NOT: { id: paymentId } },
+      select: { id: true },
+    });
+    if (alreadyUsed) {
+      throw new ConflictException(
+        'This Stellar transaction has already been applied to another payment.',
+      );
+    }
+
+    const expectedDestination = payment.merchant.settlementAddress ?? '';
+    const expectedAmount = payment.destAmount ?? payment.sourceAmount;
+    if (!expectedDestination || !expectedAmount) {
+      throw new BadRequestException(
+        'Payment is not ready to accept a Stellar transfer',
+      );
+    }
+
+    const verified = await this.stellarService.verifyIncomingPayment({
+      txHash,
+      destination: expectedDestination,
+      minAmount: expectedAmount.toString(),
+      assetCode: 'USDC',
+    });
+    if (!verified.ok) {
+      throw new BadRequestException(
+        `Stellar payment could not be verified: ${verified.reason}`,
+      );
+    }
+
+    await this.updateStatus(paymentId, PaymentStatus.COMPLETED, {
+      stellarTxHash: txHash,
+      destTxHash: txHash,
+    });
+
+    return { status: PaymentStatus.COMPLETED, stellarTxHash: txHash };
+  }
+
   async submitBurn(
     paymentId: string,
     sourceTxHash: string,
