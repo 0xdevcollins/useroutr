@@ -68,8 +68,15 @@ export class CctpProcessor extends WorkerHost {
 
       // Step 1: PROCESSING — attestation is in. Record the nonce + the
       // attestation blob (used later for refunds + audits).
+      // Iris's `eventNonce` first: on CCTP V2 an EVM burn has no nonce of its
+      // own, because `DepositForBurn` no longer carries one and Circle assigns
+      // it during attestation. Stellar burns still surface theirs, so fall back
+      // to that rather than dropping the column on the floor.
       await this.payments.updateStatus(paymentId, PaymentStatus.PROCESSING, {
-        cctpNonce: record.burn.nonce.toString(),
+        cctpNonce:
+          record.attestation.eventNonce ??
+          record.burn.nonce?.toString() ??
+          null,
         cctpAttestation: record.attestation.attestation ?? null,
       });
 

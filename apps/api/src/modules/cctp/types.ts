@@ -103,10 +103,15 @@ export interface CctpBurnResult {
   sourceDomain: number;
   /**
    * Circle's nonce for this burn. Together with the source domain it
-   * uniquely identifies the message — used as the idempotency key for
-   * attestation lookups.
+   * uniquely identifies the message.
+   *
+   * Null for EVM burns: CCTP V2 dropped the nonce from `DepositForBurn`, so it
+   * does not exist at burn time — Circle stamps it during attestation and
+   * returns it as `AttestationResponse.eventNonce`. Not the idempotency key for
+   * attestation lookups either, despite what this comment used to claim: those
+   * go to Iris by `transactionHash`.
    */
-  nonce: bigint;
+  nonce: bigint | null;
 }
 
 /** State of an attestation as reported by iris-api. */
@@ -120,6 +125,15 @@ export interface AttestationResponse {
   attestation?: string;
   /** Set when status === 'failed'. Plain English. */
   error?: string;
+  /**
+   * bytes32 nonce Circle assigns when it observes the burn.
+   *
+   * On CCTP V2 this is the only place a nonce exists for an EVM burn: the
+   * `DepositForBurn` event does not carry one, and the on-chain `MessageSent`
+   * payload holds a zero placeholder until attestation. Present on pending
+   * responses too — Iris assigns it before finality is reached.
+   */
+  eventNonce?: string;
   /**
    * When `mintMode: 'forwarder'`, this populates once Circle's forwarder
    * has broadcast the mint on the destination. Treat it as "fully

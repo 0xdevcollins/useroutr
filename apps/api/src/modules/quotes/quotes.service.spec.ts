@@ -147,11 +147,81 @@ describe('QuotesService', () => {
       expect(result.fee).toBe('0.5');
       expect(result.feeBps).toBe(50);
       expect(result.expiresInSeconds).toBeGreaterThan(0);
+      // USDC → USDC: the rate cannot drift, so this gets the long window that
+      // survives a wallet's approve-then-burn round trip. It was 30s, which is
+      // less than that round trip takes.
       expect(redisMock.setex).toHaveBeenCalledWith(
         'quote:quote-1',
-        30,
+        600,
         expect.any(String),
       );
+    });
+
+    // The window a payer actually gets. A wallet flow is read-quote → approve
+    // (mined) → burn; 30 seconds did not cover that, so quotes expired
+    // mid-payment and the payer saw an error for doing nothing wrong.
+    describe('expiry window', () => {
+      beforeEach(() => {
+        prisma.merchant.findUnique.mockResolvedValue(mockMerchant);
+        bridgeRouterMock.findRoute.mockReturnValue({
+          provider: 'cctp',
+          estimatedTimeMs: 30000,
+          estimatedFeeBps: 0,
+        });
+        prisma.quote.create.mockResolvedValue(mockQuoteData);
+      });
+
+      it('gives same-asset transfers room for a wallet round trip', async () => {
+        await service.createQuote(
+          {
+            fromChain: 'ethereum' as Chain,
+            fromAsset: 'USDC',
+            fromAmount: '100',
+          },
+          'merchant-1',
+        );
+
+        const [, ttl] = redisMock.setex.mock.calls[0] as [string, number];
+        expect(ttl).toBe(600);
+      });
+
+      it('keeps the short window when the assets differ and the rate can move', async () => {
+        await service.createQuote(
+          {
+            fromChain: 'ethereum' as Chain,
+            fromAsset: 'ETH',
+            fromAmount: '1',
+          },
+          'merchant-1',
+        );
+
+        const [, ttl] = redisMock.setex.mock.calls[0] as [string, number];
+        expect(ttl).toBe(30);
+      });
+
+      it('writes the same window to the row as to the Redis lock', async () => {
+        const before = Date.now();
+        await service.createQuote(
+          {
+            fromChain: 'ethereum' as Chain,
+            fromAsset: 'USDC',
+            fromAmount: '100',
+          },
+          'merchant-1',
+        );
+
+        const createCall = prisma.quote.create.mock.calls[0] as [
+          { data: { expiresAt: Date } },
+        ];
+        const [, ttl] = redisMock.setex.mock.calls[0] as [string, number];
+        const rowSeconds = Math.round(
+          (createCall[0].data.expiresAt.getTime() - before) / 1000,
+        );
+
+        // A row that outlives its lock (or vice versa) means one of the two
+        // decides expiry and the other lies about it.
+        expect(rowSeconds).toBe(ttl);
+      });
     });
 
     it('should apply default toChain and toAsset from merchant', async () => {
