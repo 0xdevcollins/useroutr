@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { configureApp } from './../src/configure-app';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -15,6 +16,10 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    // Same pipeline as `bootstrap()`. Without it this suite exercised a bare
+    // app: no interceptors, so `/` returned the raw string and the assertion
+    // below claimed a response shape production has never sent.
+    configureApp(app);
     await app.init();
   });
 
@@ -26,10 +31,13 @@ describe('AppController (e2e)', () => {
     // takes longer than jest's 5s default hook timeout.
   }, 60000);
 
+  // `TransformInterceptor` wraps every non-paginated payload in `{ data }`, so
+  // this is the body a real caller receives. `/` is one of the paths excluded
+  // from the `/v1` prefix, which is why it is still reachable at the root.
   it('/ (GET)', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('Hello World!');
+      .expect({ data: 'Hello World!' });
   });
 });

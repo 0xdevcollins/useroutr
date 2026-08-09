@@ -2,6 +2,8 @@
   "version": "0.0.1",
   "configurations": [
     { "name": "www", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--workspace=www", "--", "-p", "3005"], "port": 3005 },
-    { "name": "dashboard", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--workspace=dashboard", "--", "-p", "3001"], "port": 3001 }
+    { "name": "dashboard", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--workspace=dashboard", "--", "-p", "3001"], "port": 3001 },
+    { "name": "checkout", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--workspace=checkout", "--", "-p", "3003"], "port": 3003 },
+    { "name": "api", "runtimeExecutable": "npm", "runtimeArgs": ["run", "start:dev", "--workspace=api"], "port": 3333 }
   ]
 }
